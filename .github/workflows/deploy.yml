@@ -52,7 +52,7 @@ jobs:
             echo "No running instance found with tag Name=space-ship-socket" >&2
             exit 1
           fi
-            PUBLIC_DNS=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" --query "Reservations[0].Instances[0].PublicDnsName" --output text)
+          PUBLIC_DNS=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" --query "Reservations[0].Instances[0].PublicDnsName" --output text)
           echo "instance-id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
           echo "public-dns=$PUBLIC_DNS" >> "$GITHUB_OUTPUT"
           echo "Resolved EC2 $INSTANCE_ID ($PUBLIC_DNS)"

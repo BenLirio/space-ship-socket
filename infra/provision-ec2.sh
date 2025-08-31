@@ -13,7 +13,7 @@ REGION=${REGION:-${AWS_REGION:-us-east-1}}
 KEY_NAME=${KEY_NAME:-space-ship-socket-key}
 SEC_GROUP_NAME=${SEC_GROUP_NAME:-space-ship-socket-sg}
 INSTANCE_NAME_TAG=${INSTANCE_NAME_TAG:-space-ship-socket}
-INSTANCE_TYPE=${INSTANCE_TYPE:-t3.small}
+INSTANCE_TYPE=${INSTANCE_TYPE:-t3.nano} # override with INSTANCE_TYPE env var if you need more resources
 # Amazon Linux 2023 AMI (x86_64) – this ID changes over time; we resolve latest via SSM parameter.
 AMI_ID=$(aws ssm get-parameter --region "$REGION" --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64 --query Parameter.Value --output text)
 
@@ -28,17 +28,46 @@ else
   echo "Key pair $KEY_NAME already exists (not exporting private key)."
 fi
 
-# Security group
+# Security group & ingress rules
 SG_ID=$(aws ec2 describe-security-groups --region "$REGION" --group-names "$SEC_GROUP_NAME" --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || true)
 if [[ -z "$SG_ID" || "$SG_ID" == "None" ]]; then
   echo "Creating security group $SEC_GROUP_NAME"
   SG_ID=$(aws ec2 create-security-group --region "$REGION" --group-name "$SEC_GROUP_NAME" --description "Space Ship Socket SG" --query 'GroupId' --output text)
-  # Allow SSH (22) from your IP and WebSocket (8080) from anywhere (adjust as needed)
-  MY_IP=$(curl -s https://checkip.amazonaws.com || echo "0.0.0.0")
-  aws ec2 authorize-security-group-ingress --region "$REGION" --group-id "$SG_ID" --protocol tcp --port 22 --cidr ${MY_IP%$'\n'}/32 || true
-  aws ec2 authorize-security-group-ingress --region "$REGION" --group-id "$SG_ID" --ip-permissions 'IpProtocol=tcp,FromPort=8080,ToPort=8080,IpRanges=[{CidrIp=0.0.0.0/0}]' || true
+  CREATED_SG=1
 else
   echo "Reusing security group $SEC_GROUP_NAME ($SG_ID)"
+  CREATED_SG=0
+fi
+
+# Always ensure WebSocket port 8080 open (idempotent)
+aws ec2 authorize-security-group-ingress --region "$REGION" --group-id "$SG_ID" --ip-permissions 'IpProtocol=tcp,FromPort=8080,ToPort=8080,IpRanges=[{CidrIp=0.0.0.0/0}]' >/dev/null 2>&1 || true
+
+# SSH ingress strategy:
+# By default (no env vars) we only add your current public IP (same as original behavior) *once* on SG creation.
+# To allow GitHub Actions runners without dynamic rule injection, set OPEN_SSH_CIDRS to a comma-separated list of CIDR blocks
+# OR set OPEN_SSH_WORLD=1 to allow 0.0.0.0/0 (NOT recommended for production without additional hardening).
+# Examples:
+#   OPEN_SSH_CIDRS="0.0.0.0/0" bash infra/provision-ec2.sh
+#   OPEN_SSH_CIDRS="140.82.0.0/16,185.199.108.0/22" bash infra/provision-ec2.sh
+#   OPEN_SSH_WORLD=1 bash infra/provision-ec2.sh
+
+if [[ "${OPEN_SSH_WORLD:-0}" == "1" ]]; then
+  OPEN_SSH_CIDRS="0.0.0.0/0"
+fi
+
+if [[ -n "${OPEN_SSH_CIDRS:-}" ]]; then
+  IFS=',' read -r -a CIDR_LIST <<<"$OPEN_SSH_CIDRS"
+  for cidr in "${CIDR_LIST[@]}"; do
+    cidr_trimmed=$(echo "$cidr" | xargs)
+    [[ -z "$cidr_trimmed" ]] && continue
+    echo "Authorizing SSH from $cidr_trimmed"
+    aws ec2 authorize-security-group-ingress --region "$REGION" --group-id "$SG_ID" --protocol tcp --port 22 --cidr "$cidr_trimmed" >/dev/null 2>&1 || true
+  done
+elif [[ $CREATED_SG -eq 1 ]]; then
+  # Only add your IP automatically on first creation if no custom CIDRs provided
+  MY_IP=$(curl -s https://checkip.amazonaws.com || echo "0.0.0.0")
+  echo "Authorizing SSH from provisioning host ${MY_IP%$'\n'}/32"
+  aws ec2 authorize-security-group-ingress --region "$REGION" --group-id "$SG_ID" --protocol tcp --port 22 --cidr ${MY_IP%$'\n'}/32 >/dev/null 2>&1 || true
 fi
 
 # Check for an existing running instance with the Name tag
@@ -72,4 +101,5 @@ echo
 echo "Next steps:"
 echo "  1. Store the contents of ${KEY_NAME}.pem as GitHub secret EC2_SSH_KEY (if newly created)."
 echo "  2. Add AWS credentials & region as secrets (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION)."
-echo "  3. Push to master to trigger deployment workflow."
+echo "  3. (Optional) Re-run with OPEN_SSH_CIDRS or OPEN_SSH_WORLD=1 if GitHub Actions needs persistent SSH access." 
+echo "  4. Push to master to trigger deployment workflow."
