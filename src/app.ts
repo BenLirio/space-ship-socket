@@ -1,7 +1,7 @@
-import { WebSocketServer, WebSocket } from 'ws';
-import type { RawData } from 'ws';
+import { WebSocketServer } from 'ws';
 import fs from 'fs';
 import https from 'https';
+import { attachSocketHandlers } from './socketHandlers.js';
 
 export interface OutgoingMessage {
   type: 'welcome' | 'echo' | 'clients' | 'error';
@@ -33,45 +33,7 @@ export async function startServer(port: number): Promise<StartedServer> {
   }
 
   const wss = server ? new WebSocketServer({ server }) : new WebSocketServer({ port });
-
-  function broadcast(data: OutgoingMessage, except?: WebSocket) {
-    const encoded = JSON.stringify(data);
-    for (const client of wss.clients) {
-      if (client.readyState === WebSocket.OPEN && client !== except) {
-        client.send(encoded);
-      }
-    }
-  }
-
-  wss.on('connection', (socket: WebSocket) => {
-    console.log(`New client connected`);
-    socket.send(
-      JSON.stringify({
-        type: 'welcome',
-        payload: { message: 'Connected to space-ship-socket server' },
-      } satisfies OutgoingMessage),
-    );
-
-    broadcast({ type: 'clients', payload: { count: wss.clients.size } });
-
-    socket.on('message', (data: RawData) => {
-      const text = data.toString();
-      if (text === 'ping') {
-        socket.send(JSON.stringify({ type: 'echo', payload: 'pong' } satisfies OutgoingMessage));
-        return;
-      }
-      try {
-        const parsed = JSON.parse(text);
-        broadcast({ type: 'echo', payload: parsed });
-      } catch {
-        broadcast({ type: 'echo', payload: text });
-      }
-    });
-
-    socket.on('close', () => {
-      broadcast({ type: 'clients', payload: { count: wss.clients.size } });
-    });
-  });
+  attachSocketHandlers(wss);
 
   if (server) {
     server.listen(port);
