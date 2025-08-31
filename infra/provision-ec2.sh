@@ -43,15 +43,13 @@ fi
 aws ec2 authorize-security-group-ingress --region "$REGION" --group-id "$SG_ID" --ip-permissions 'IpProtocol=tcp,FromPort=8080,ToPort=8080,IpRanges=[{CidrIp=0.0.0.0/0}]' >/dev/null 2>&1 || true
 
 # SSH ingress strategy:
-# By default (no env vars) we only add your current public IP (same as original behavior) *once* on SG creation.
-# To allow GitHub Actions runners without dynamic rule injection, set OPEN_SSH_CIDRS to a comma-separated list of CIDR blocks
-# OR set OPEN_SSH_WORLD=1 to allow 0.0.0.0/0 (NOT recommended for production without additional hardening).
+# NEW DEFAULT: open SSH (22) to the world 0.0.0.0/0 unless you explicitly set a narrower list.
+# Override by setting OPEN_SSH_CIDRS (comma-separated) or OPEN_SSH_WORLD=0 to disable world-open default.
 # Examples:
-#   OPEN_SSH_CIDRS="0.0.0.0/0" bash infra/provision-ec2.sh
-#   OPEN_SSH_CIDRS="140.82.0.0/16,185.199.108.0/22" bash infra/provision-ec2.sh
-#   OPEN_SSH_WORLD=1 bash infra/provision-ec2.sh
+#   OPEN_SSH_CIDRS="140.82.0.0/16,185.199.108.0/22" bash infra/provision-ec2.sh  # narrow GitHub ranges
+#   OPEN_SSH_WORLD=0 OPEN_SSH_CIDRS="203.0.113.10/32" bash infra/provision-ec2.sh # single IP only
 
-if [[ "${OPEN_SSH_WORLD:-0}" == "1" ]]; then
+if [[ "${OPEN_SSH_WORLD:-1}" == "1" && -z "${OPEN_SSH_CIDRS:-}" ]]; then
   OPEN_SSH_CIDRS="0.0.0.0/0"
 fi
 
@@ -63,11 +61,6 @@ if [[ -n "${OPEN_SSH_CIDRS:-}" ]]; then
     echo "Authorizing SSH from $cidr_trimmed"
     aws ec2 authorize-security-group-ingress --region "$REGION" --group-id "$SG_ID" --protocol tcp --port 22 --cidr "$cidr_trimmed" >/dev/null 2>&1 || true
   done
-elif [[ $CREATED_SG -eq 1 ]]; then
-  # Only add your IP automatically on first creation if no custom CIDRs provided
-  MY_IP=$(curl -s https://checkip.amazonaws.com || echo "0.0.0.0")
-  echo "Authorizing SSH from provisioning host ${MY_IP%$'\n'}/32"
-  aws ec2 authorize-security-group-ingress --region "$REGION" --group-id "$SG_ID" --protocol tcp --port 22 --cidr ${MY_IP%$'\n'}/32 >/dev/null 2>&1 || true
 fi
 
 # Check for an existing running instance with the Name tag
