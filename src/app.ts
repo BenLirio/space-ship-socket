@@ -20,16 +20,10 @@ export async function startServer(port: number): Promise<StartedServer> {
   const certPath = process.env.TLS_CERT_PATH || '/etc/space-ship-socket/certs/fullchain.pem';
   const keyPath = process.env.TLS_KEY_PATH || '/etc/space-ship-socket/certs/privkey.pem';
   let server: https.Server | undefined;
-  let usingTls = false;
   if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
-    try {
-      const cert = fs.readFileSync(certPath);
-      const key = fs.readFileSync(keyPath);
-      server = https.createServer({ cert, key });
-      usingTls = true;
-    } catch (err) {
-      console.warn('[startup] Found TLS cert/key but failed to read, continuing without TLS', err);
-    }
+    const cert = fs.readFileSync(certPath);
+    const key = fs.readFileSync(keyPath);
+    server = https.createServer({ cert, key });
   }
 
   const wss = server ? new WebSocketServer({ server }) : new WebSocketServer({ port });
@@ -73,26 +67,13 @@ export async function startServer(port: number): Promise<StartedServer> {
     });
   });
 
-  if (server) {
-    server.listen(port);
-    await new Promise<void>((resolve) => server!.once('listening', resolve));
-  } else {
-    await new Promise<void>((resolve) => wss.once('listening', resolve));
-  }
+  await new Promise<void>((resolve) => (server ? server : wss).once('listening', resolve));
 
   // address retrieval differs if we used underlying server
   const addr = (server || wss).address();
   const actualPort = typeof addr === 'object' && addr ? addr.port : port;
-  const scheme = usingTls ? 'wss' : 'ws';
+  const scheme = server ? 'wss' : 'ws';
   console.log(`🚀 WebSocket server listening on ${scheme}://0.0.0.0:${actualPort}`);
-  if (!usingTls) {
-    console.log(
-      '[info] TLS not enabled (cert/key not found). To enable wss, provide cert at',
-      certPath,
-      'and key at',
-      keyPath,
-    );
-  }
 
   wss.on('error', (err) => {
     console.error('WebSocket server error', err);
