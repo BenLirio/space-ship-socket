@@ -22,6 +22,10 @@ export function initGameLoop(wss: WebSocketServer): GlobalLoopState {
   if (currentLoop) return currentLoop;
 
   const dynamicState: GameState = { ships: {} };
+  // Target broadcast frequency (ticks per second)
+  const TICK_HZ = 30;
+  const TICK_MS = 1000 / TICK_HZ; // ~33.33ms
+
   const interval = setInterval(() => {
     // Purge stale ships before broadcasting
     const now = Date.now();
@@ -37,7 +41,7 @@ export function initGameLoop(wss: WebSocketServer): GlobalLoopState {
       console.log(`[gameLoop] Purged ${purged} stale ship(s)`);
     }
     broadcast(wss, { type: 'gameState', payload: dynamicState });
-  }, 1000);
+  }, TICK_MS);
 
   currentLoop = { interval, wss, gameState: dynamicState };
 
