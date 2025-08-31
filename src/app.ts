@@ -25,6 +25,7 @@ export async function startServer(port: number): Promise<StartedServer> {
   }
 
   wss.on('connection', (socket: WebSocket) => {
+    console.log(`New client connected`);
     socket.send(
       JSON.stringify({
         type: 'welcome',
