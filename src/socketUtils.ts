@@ -1,6 +1,6 @@
 import { WebSocket } from 'ws';
 import type { WebSocketServer } from 'ws';
-import type { OutgoingMessage } from './app.js';
+import type { OutgoingMessage } from './types/messages.js';
 
 export function sendJson(socket: WebSocket, msg: OutgoingMessage) {
   socket.send(JSON.stringify(msg));

@@ -1,9 +1,9 @@
 import type { WebSocket } from 'ws';
 import type { WebSocketServer } from 'ws';
-import type { OutgoingMessage, IncomingMessage } from '../app.js';
+import type { OutgoingMessage, IncomingMessage } from '../types/messages.js';
 import { sendJson } from '../socketUtils.js';
 
-export type PingMessage = IncomingMessage & { type: 'ping' };
+// PingMessage now exported from types/messages.ts
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function handlePing(_wss: WebSocketServer, socket: WebSocket, _msg: IncomingMessage) {

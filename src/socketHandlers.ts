@@ -1,6 +1,6 @@
 import type { WebSocket } from 'ws';
 import type { RawData, WebSocketServer } from 'ws';
-import type { IncomingMessage } from './app.js';
+import type { IncomingMessage } from './types/messages.js';
 import { sendJson } from './socketUtils.js';
 import { handlePing } from './handlers/ping.js';
 

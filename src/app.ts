@@ -2,25 +2,7 @@ import { WebSocketServer } from 'ws';
 import fs from 'fs';
 import https from 'https';
 import { attachSocketHandlers } from './socketHandlers.js';
-
-export interface OutgoingMessage {
-  type: 'echo' | 'error' | 'ping' | 'info';
-  payload?: unknown;
-}
-
-// Incoming messages now follow a { type, body } shape. Body is optional.
-export interface IncomingMessage {
-  type: string;
-  body?: unknown;
-  // Allow arbitrary extra fields if needed for future extensibility
-  [k: string]: unknown;
-}
-
-export interface StartedServer {
-  wss: WebSocketServer;
-  port: number;
-  stop: () => Promise<void>;
-}
+import type { StartedServer } from './types/server.js';
 
 export async function startServer(port: number): Promise<StartedServer> {
   // Optional TLS (wss) support: if cert & key exist (or explicitly configured via env),
