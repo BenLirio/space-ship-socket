@@ -31,12 +31,10 @@ node -e "const WebSocket=require('ws');const ws=new WebSocket('ws://localhost:80
 
 ### Message Types
 
-| type    | payload                         |
-| ------- | ------------------------------- |
-| welcome | { message: string }             |
-| clients | { count: number }               |
-| echo    | any (what was sent by a client) |
-| error   | error details (reserved)        |
+| type  | payload                         |
+| ----- | ------------------------------- |
+| echo  | any (what was sent by a client) |
+| error | error details (reserved)        |
 
 ### Environment
 
