@@ -41,6 +41,7 @@ node -e "const WebSocket=require('ws');const ws=new WebSocket('ws://localhost:80
 ### Environment
 
 `PORT` (default 8080; on EC2 we set 443 for wss via /etc/space-ship-socket/env)
+`REQUIRE_TLS` (set to `1` in production bootstrap so the service will refuse to start without certificates when binding 443)
 
 ### Enabling WSS (TLS)
 
@@ -69,7 +70,7 @@ Client connects with:
 new WebSocket('wss://your.domain.example');
 ```
 
-If cert/key absent, server falls back to plain ws on configured port.
+If cert/key absent, server falls back to plain ws on configured port UNLESS `REQUIRE_TLS=1` (or binding 443), in which case startup fails fast.
 
 ---
 
