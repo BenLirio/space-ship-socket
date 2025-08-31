@@ -2,7 +2,7 @@ name: Deploy
 
 on:
   push:
-    branches: [ "master" ]
+    branches: ['master']
   workflow_dispatch: {}
 
 permissions:
@@ -67,16 +67,14 @@ jobs:
         run: |
           set -euo pipefail
           scp -o StrictHostKeyChecking=no -i key.pem deploy.tar.gz ec2-user@${HOST}:/tmp/deploy.tar.gz
-          ssh -o StrictHostKeyChecking=no -i key.pem ec2-user@${HOST} 'bash -s' <<'REMOTE'
-          set -euo pipefail
-          sudo mkdir -p /opt/space-ship-socket
-          sudo chown ec2-user:ec2-user /opt/space-ship-socket
-          cd /opt/space-ship-socket
-          tar xzf /tmp/deploy.tar.gz
-          npm install --omit=dev --no-audit --no-fund
-          sudo systemctl restart space-ship-socket.service || sudo systemctl start space-ship-socket.service
-          systemctl status --no-pager space-ship-socket.service || true
-REMOTE
+          ssh -o StrictHostKeyChecking=no -i key.pem ec2-user@${HOST} "bash -c 'set -euo pipefail
+            sudo mkdir -p /opt/space-ship-socket
+            sudo chown ec2-user:ec2-user /opt/space-ship-socket
+            cd /opt/space-ship-socket
+            tar xzf /tmp/deploy.tar.gz
+            npm install --omit=dev --no-audit --no-fund
+            sudo systemctl restart space-ship-socket.service || sudo systemctl start space-ship-socket.service
+            systemctl status --no-pager space-ship-socket.service || true'"
 
       - name: Smoke test (WebSocket ping)
         env:
