@@ -15,12 +15,10 @@ export interface StartedServer {
 }
 
 export async function startServer(port: number): Promise<StartedServer> {
-  // TLS (wss) support: if cert & key exist (or explicitly configured via env),
-  // we create an HTTPS server and attach WebSocketServer to it. Otherwise fall back to plain ws
-  // UNLESS either REQUIRE_TLS=1 is set or we're binding to port 443 (common implicit expectation of TLS).
+  // Optional TLS (wss) support: if cert & key exist (or explicitly configured via env),
+  // we create an HTTPS server and attach WebSocketServer to it. Otherwise fall back to plain ws.
   const certPath = process.env.TLS_CERT_PATH || '/etc/space-ship-socket/certs/fullchain.pem';
   const keyPath = process.env.TLS_KEY_PATH || '/etc/space-ship-socket/certs/privkey.pem';
-  const requireTls = process.env.REQUIRE_TLS === '1' || port === 443;
   let server: https.Server | undefined;
   let usingTls = false;
   if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
@@ -32,11 +30,6 @@ export async function startServer(port: number): Promise<StartedServer> {
     } catch (err) {
       console.warn('[startup] Found TLS cert/key but failed to read, continuing without TLS', err);
     }
-  }
-  if (!server && requireTls) {
-    const reason = `TLS required (REQUIRE_TLS=${process.env.REQUIRE_TLS || '0'}; port=${port}) but certificate/key not present at ${certPath} / ${keyPath}`;
-    console.error('[startup] FATAL:', reason);
-    throw new Error(reason);
   }
 
   const wss = server ? new WebSocketServer({ server }) : new WebSocketServer({ port });
@@ -99,15 +92,6 @@ export async function startServer(port: number): Promise<StartedServer> {
       'and key at',
       keyPath,
     );
-    if (requireTls) {
-      console.warn(
-        '[warning] TLS was required but server started without it (this should not happen)',
-      );
-    } else if (actualPort === 443) {
-      console.warn(
-        '[warning] Listening on privileged port 443 WITHOUT TLS – consider adding certificates or setting a different port',
-      );
-    }
   }
 
   wss.on('error', (err) => {

@@ -39,8 +39,8 @@ else
   CREATED_SG=0
 fi
 
-# (Legacy) 8080 plain WS port was previously opened. Now we prefer only 443 (wss). Uncomment to re-enable:
-# aws ec2 authorize-security-group-ingress --region "$REGION" --group-id "$SG_ID" --ip-permissions 'IpProtocol=tcp,FromPort=8080,ToPort=8080,IpRanges=[{CidrIp=0.0.0.0/0}]' >/dev/null 2>&1 || true
+# Always ensure WebSocket port 8080 open (idempotent) – legacy/plain WS (can be removed once 443 only)
+aws ec2 authorize-security-group-ingress --region "$REGION" --group-id "$SG_ID" --ip-permissions 'IpProtocol=tcp,FromPort=8080,ToPort=8080,IpRanges=[{CidrIp=0.0.0.0/0}]' >/dev/null 2>&1 || true
 
 # Open 443 for wss (TLS) access
 aws ec2 authorize-security-group-ingress --region "$REGION" --group-id "$SG_ID" --ip-permissions 'IpProtocol=tcp,FromPort=443,ToPort=443,IpRanges=[{CidrIp=0.0.0.0/0}]' >/dev/null 2>&1 || true

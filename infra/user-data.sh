@@ -23,7 +23,6 @@ if [[ ! -f "$ENV_FILE" ]]; then
 # TLS_CERT_PATH=/etc/space-ship-socket/certs/fullchain.pem
 # TLS_KEY_PATH=/etc/space-ship-socket/certs/privkey.pem
 PORT=443
-REQUIRE_TLS=1
 ENV
 fi
 
@@ -41,10 +40,6 @@ ExecStart=/usr/bin/node dist/src/server.js
 Restart=on-failure
 User=ec2-user
 Group=ec2-user
-# Allow binding to privileged port 443 without running as root
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
-NoNewPrivileges=true
 
 [Install]
 WantedBy=multi-user.target
