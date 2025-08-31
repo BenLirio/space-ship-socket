@@ -3,19 +3,25 @@ import type { RawData, WebSocketServer } from 'ws';
 import type { IncomingMessage } from './types/messages.js';
 import { sendJson, broadcast } from './socketUtils.js';
 import { handlePing } from './handlers/ping.js';
+import { handleShipState } from './handlers/shipState.js';
 import type { GameState } from './types/game.js';
 import type { CustomWebSocket } from './types/socket.js';
 import { randomUUID } from 'crypto';
 
 // Declare a global slot to ensure only one loop instance
+interface GlobalLoopState {
+  interval: NodeJS.Timer;
+  wss: WebSocketServer;
+  gameState: GameState;
+}
 declare global {
-  // eslint-disable-next-line no-var
-  var __SPACE_SHIP_GAME_LOOP__: { interval: NodeJS.Timer; wss: WebSocketServer } | undefined; // NOSONAR - intentional global guard
+  var __SPACE_SHIP_GAME_LOOP__: GlobalLoopState | undefined; // NOSONAR - intentional global guard
 }
 
 // Concrete handler overload resolution via narrow mapping then widened when accessed dynamically
 const specificHandlers = {
   ping: handlePing,
+  shipState: handleShipState,
 };
 const handlers: Record<
   string,
@@ -34,26 +40,13 @@ function isIncomingMessage(value: unknown): value is IncomingMessage {
 export function attachSocketHandlers(wss: WebSocketServer) {
   // Start a single game loop broadcaster (idempotent if called multiple times for different servers in tests)
   if (!globalThis.__SPACE_SHIP_GAME_LOOP__) {
-    const STATIC_STATE: GameState = {
-      ships: {
-        'static-ship-1': {
-          physics: { position: { x: 200, y: 200 }, rotation: 0 },
-          appearance: {
-            shipImageUrl:
-              'https://space-ship-sprites.s3.amazonaws.com/generated/30c69e6e-ed68-4451-a572-fe52f238b731.png',
-          },
-        },
-      },
-    };
-
+    const dynamicState: GameState = { ships: {} };
     const interval = setInterval(() => {
-      // Broadcast static game state snapshot
-      broadcast(wss, { type: 'gameState', payload: STATIC_STATE });
-    }, 1000);
+      // Periodic broadcast snapshot
+      broadcast(wss, { type: 'gameState', payload: dynamicState });
+    }, 1000); // TODO: tune tick rate
 
-    // Store handle on global so repeated attach calls (e.g., tests) don't spawn extra intervals.
-    // Also keep reference to clear on server close.
-    globalThis.__SPACE_SHIP_GAME_LOOP__ = { interval, wss };
+    globalThis.__SPACE_SHIP_GAME_LOOP__ = { interval, wss, gameState: dynamicState };
 
     wss.on('close', () => {
       clearInterval(interval);
