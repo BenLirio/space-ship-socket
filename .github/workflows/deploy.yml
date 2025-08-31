@@ -79,7 +79,7 @@ jobs:
 
       - name: Smoke test (WebSocket/WSS ping)
         env:
-          HOST: ${{ steps.ec2.outputs.public-dns }}
+          HOST: ${{ vars.HOST }}
           PORT: 8080
           SCHEME: auto
         run: |
