@@ -43,7 +43,7 @@ async function run() {
   await welcomePromise;
 
   client.send(JSON.stringify({ type: 'ping' }));
-  await waitForMessage(client, (m) => m.type === 'echo' && m.payload === 'pong');
+  await waitForMessage(client, (m) => m.type === 'ping');
 
   client.send(JSON.stringify({ hello: 'world' }));
   await waitForMessage(

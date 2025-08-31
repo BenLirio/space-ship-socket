@@ -21,7 +21,7 @@ if (!['ws', 'wss'].includes(scheme)) {
 }
 
 let ws;
-let gotPong = false;
+let gotPong = false; // now indicates we've received ping ack
 let closed = false;
 let timeout;
 
@@ -69,13 +69,20 @@ function attachHandlers() {
       }
       return;
     }
-    if (parsed && parsed.type === 'echo' && parsed.payload === 'pong') {
+    if (parsed && parsed.type === 'ping') {
       gotPong = true;
-      console.log('Received structured pong');
+      console.log('Received ping ack');
       ws.close();
-    } else {
-      console.log('Received other message:', txt.slice(0, 120));
+      return;
     }
+    if (parsed && parsed.type === 'echo' && parsed.payload === 'pong') {
+      // backward compatibility if server not updated yet
+      gotPong = true;
+      console.log('Received legacy structured pong');
+      ws.close();
+      return;
+    }
+    console.log('Received other message:', txt.slice(0, 120));
   });
 
   ws.on('error', (err) => {
