@@ -1,6 +1,6 @@
 // Centralized message-related TypeScript types
 export interface OutgoingMessage {
-  type: 'echo' | 'error' | 'ping' | 'info' | 'gameState';
+  type: 'echo' | 'error' | 'ping' | 'info' | 'gameState' | 'connected';
   payload?: unknown;
 }
 
