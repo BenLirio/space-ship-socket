@@ -45,3 +45,63 @@ node -e "const WebSocket=require('ws');const ws=new WebSocket('ws://localhost:80
 ---
 
 MIT License
+
+## Deployment (AWS EC2 + GitHub Actions)
+
+This repo includes an opinionated, minimal setup to deploy the built WebSocket server to a single Amazon EC2 instance using a GitHub Actions workflow.
+
+### 1. Provision Infrastructure
+
+Run (review first):
+
+```
+bash infra/provision-ec2.sh
+```
+
+It will:
+
+1. Create (or reuse) a key pair (default: `space-ship-socket-key`).
+2. Create (or reuse) a security group allowing inbound 22 (SSH from your IP) and 8080 (public).
+3. Launch (or reuse) a `t3.small` Amazon Linux 2023 instance tagged `Name=space-ship-socket` with a bootstrap script that installs Node.js and a systemd service placeholder.
+4. Output the public DNS / IP.
+
+Keep the generated `*.pem` file safe.
+
+### 2. Configure GitHub Secrets
+
+Add repository secrets (Settings > Secrets > Actions):
+
+| Secret                  | Description                                                                                                 |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `AWS_ACCESS_KEY_ID`     | IAM user / role key with EC2 describe privileges (and optionally create if you run provisioning elsewhere). |
+| `AWS_SECRET_ACCESS_KEY` | Matching secret.                                                                                            |
+| `AWS_REGION`            | Region used (e.g. `us-east-1`).                                                                             |
+| `EC2_SSH_KEY`           | Contents of the generated `.pem` private key (multi-line).                                                  |
+
+Permissions needed for deploy workflow runtime: `ec2:DescribeInstances`. Provisioning requires more (create key pair, security groups, run instances).
+
+### 3. Deploy
+
+Push to `master` (or run the workflow manually). The workflow will:
+
+1. Build the TypeScript project.
+2. Package `dist` + `package.json` into a tarball.
+3. Discover the running instance by tag `Name=space-ship-socket`.
+4. Copy the artifact via SSH and install production dependencies (`npm install --omit=dev`).
+5. Restart the systemd service `space-ship-socket`.
+6. Perform a WebSocket ping smoke test.
+
+Service file installed at provisioning time: `/etc/systemd/system/space-ship-socket.service`.
+
+Adjust ports or instance sizing by editing `infra/provision-ec2.sh` and re-running (will reuse existing resources when possible).
+
+### 4. Rollback
+
+You can redeploy a previous commit by re-running the workflow on that commit. For deeper rollback, keep AMI snapshots or adopt an immutable / blue-green approach (future improvement suggestion).
+
+### Future Improvements
+
+- Parameterize port & instance tag via workflow inputs.
+- Add health endpoint & HTTP ALB.
+- Containerize & use ECS / Fargate or Elastic Beanstalk.
+- Use CodeDeploy or SSM Session Manager instead of raw SSH.

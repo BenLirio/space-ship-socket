@@ -1,0 +1,85 @@
+name: Deploy
+
+on:
+  push:
+    branches: [ "master" ]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Package
+        run: |
+          tar czf deploy.tar.gz dist package.json
+          ls -l deploy.tar.gz
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Resolve EC2 host by tag
+        id: ec2
+        shell: bash
+        run: |
+          set -euo pipefail
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=space-ship-socket" "Name=instance-state-name,Values=running" \
+            --query "Reservations[0].Instances[0].InstanceId" --output text || true)
+          if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then
+            echo "No running instance found with tag Name=space-ship-socket" >&2
+            exit 1
+          fi
+            PUBLIC_DNS=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" --query "Reservations[0].Instances[0].PublicDnsName" --output text)
+          echo "instance-id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
+          echo "public-dns=$PUBLIC_DNS" >> "$GITHUB_OUTPUT"
+          echo "Resolved EC2 $INSTANCE_ID ($PUBLIC_DNS)"
+
+      - name: Prepare SSH key
+        run: |
+          echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
+          chmod 600 key.pem
+
+      - name: Deploy artifact
+        env:
+          HOST: ${{ steps.ec2.outputs.public-dns }}
+        run: |
+          set -euo pipefail
+          scp -o StrictHostKeyChecking=no -i key.pem deploy.tar.gz ec2-user@${HOST}:/tmp/deploy.tar.gz
+          ssh -o StrictHostKeyChecking=no -i key.pem ec2-user@${HOST} 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo mkdir -p /opt/space-ship-socket
+          sudo chown ec2-user:ec2-user /opt/space-ship-socket
+          cd /opt/space-ship-socket
+          tar xzf /tmp/deploy.tar.gz
+          npm install --omit=dev --no-audit --no-fund
+          sudo systemctl restart space-ship-socket.service || sudo systemctl start space-ship-socket.service
+          systemctl status --no-pager space-ship-socket.service || true
+REMOTE
+
+      - name: Smoke test (WebSocket ping)
+        env:
+          HOST: ${{ steps.ec2.outputs.public-dns }}
+        run: |
+          node -e "const WebSocket=require('ws');const host=process.env.HOST;const ws=new WebSocket('ws://'+host+':8080');let ok=false;ws.on('open',()=>ws.send('ping'));ws.on('message',m=>{if(m.toString().includes('pong')){ok=true;console.log('Received pong');ws.close();}});ws.on('close',()=>{if(!ok){console.error('Did not receive pong');process.exit(1)}});setTimeout(()=>{console.error('Timeout');process.exit(1)},8000);"
