@@ -4,6 +4,7 @@ import type { IncomingMessage } from '../types/messages.js';
 import { sendJson, broadcast } from '../socketUtils.js';
 import type { ShipState } from '../types/game.js';
 import type { CustomWebSocket } from '../types/socket.js';
+import { getGameState } from '../gameLoop.js';
 
 function isVector2(v: unknown): v is { x: number; y: number } {
   if (!v || typeof v !== 'object') return false;
@@ -29,8 +30,8 @@ export function handleShipState(wss: WebSocketServer, socket: WebSocket, msg: In
   if (!isShipState(payload)) {
     return sendJson(socket, { type: 'error', payload: 'invalid shipState payload' });
   }
-  if (!globalThis.__SPACE_SHIP_GAME_LOOP__) return; // Should not happen, defensive
-  const gameState = globalThis.__SPACE_SHIP_GAME_LOOP__.gameState;
+  const gameState = getGameState();
+  if (!gameState) return; // Defensive (loop not started)
   const entityId = (socket as CustomWebSocket).id;
   const enriched: ShipState = { ...payload, lastUpdatedAt: Date.now() };
   gameState.ships[entityId] = enriched;
