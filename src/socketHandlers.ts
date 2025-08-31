@@ -25,32 +25,35 @@ function isIncomingMessage(value: unknown): value is IncomingMessage {
 export function attachSocketHandlers(wss: WebSocketServer) {
   wss.on('connection', (socket: WebSocket) => {
     console.log('New client connected');
-    // (welcome + client count messages removed per specification)
+    sendJson(socket, { type: 'info', payload: 'connected to server' });
 
     socket.on('message', (data: RawData) => {
       const text = data.toString();
       let parsed: unknown;
+
       try {
         parsed = JSON.parse(text);
       } catch {
-        sendJson(socket, { type: 'error', payload: 'invalid JSON' });
-        return;
+        return sendJson(socket, { type: 'error', payload: 'invalid JSON' });
       }
+
       if (!isIncomingMessage(parsed)) {
-        sendJson(socket, { type: 'error', payload: 'message must have a string "type" field' });
-        return;
+        return sendJson(socket, {
+          type: 'error',
+          payload: 'message must have a string "type" field',
+        });
       }
 
       const handler = handlers[parsed.type];
-      if (handler) {
-        try {
-          handler(wss, socket, parsed);
-        } catch (err) {
-          console.error('handler error for type', parsed.type, err);
-          sendJson(socket, { type: 'error', payload: 'internal handler error' });
-        }
-      } else {
-        sendJson(socket, { type: 'error', payload: `unknown message type: ${parsed.type}` });
+      if (!handler) {
+        return sendJson(socket, { type: 'error', payload: `unknown message type: ${parsed.type}` });
+      }
+
+      try {
+        handler(wss, socket, parsed);
+      } catch (err) {
+        console.error('handler error for type', parsed.type, err);
+        return sendJson(socket, { type: 'error', payload: 'internal handler error' });
       }
     });
 

@@ -4,7 +4,7 @@ import https from 'https';
 import { attachSocketHandlers } from './socketHandlers.js';
 
 export interface OutgoingMessage {
-  type: 'echo' | 'error' | 'ping';
+  type: 'echo' | 'error' | 'ping' | 'info';
   payload?: unknown;
 }
 
