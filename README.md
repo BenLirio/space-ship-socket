@@ -40,7 +40,7 @@ node -e "const WebSocket=require('ws');const ws=new WebSocket('ws://localhost:80
 
 ### Environment
 
-`PORT` (default 8080; on EC2 we set 443 for wss via /etc/space-ship-socket/env)
+`PORT` (default 8080; used for both ws and wss)
 
 ### Enabling WSS (TLS)
 
@@ -61,7 +61,7 @@ Steps (example using certbot + standalone HTTP challenge, assuming DNS A record 
 4. Run: `sudo certbot certonly --standalone -d your.domain.example`.
 5. Symlink or copy resulting `fullchain.pem` and `privkey.pem` into `/etc/space-ship-socket/certs/`.
 6. Ensure permissions: `sudo chown root:ec2-user /etc/space-ship-socket/certs/*.pem` and `sudo chmod 640 /etc/space-ship-socket/certs/*.pem`.
-7. Set PORT=443 in `/etc/space-ship-socket/env` (already defaulted) and restart: `sudo systemctl restart space-ship-socket`.
+7. (Optional) Adjust `PORT` in `/etc/space-ship-socket/env` (default 8080) and restart: `sudo systemctl restart space-ship-socket`.
 
 Client connects with:
 

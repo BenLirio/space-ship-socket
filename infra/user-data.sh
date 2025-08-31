@@ -22,7 +22,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
 # Uncomment and set if you provide custom cert locations
 # TLS_CERT_PATH=/etc/space-ship-socket/certs/fullchain.pem
 # TLS_KEY_PATH=/etc/space-ship-socket/certs/privkey.pem
-PORT=443
+PORT=8080
 ENV
 fi
 

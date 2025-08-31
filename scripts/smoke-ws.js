@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* eslint-env node */
 // Simple WebSocket/WSS smoke test connecting to deployed host and expecting a pong reply.
-// Usage: HOST=ec2-public-dns [PORT=443] [SCHEME=auto|ws|wss] [INSECURE=1] node scripts/smoke-ws.js
+// Usage: HOST=ec2-public-dns [PORT=8080] [SCHEME=auto|ws|wss] [INSECURE=1] node scripts/smoke-ws.js
 import { WebSocket } from 'ws';
 
 const host = process.env.HOST;
@@ -11,11 +11,12 @@ if (!host) {
 }
 
 const timeoutMs = Number(process.env.SMOKE_TIMEOUT_MS || 8000);
-const port = Number(process.env.PORT || 443);
+const port = Number(process.env.PORT || 8080);
 const schemeEnv = process.env.SCHEME || 'auto';
-const scheme = schemeEnv === 'auto' ? (port === 443 ? 'wss' : 'ws') : schemeEnv;
+// Auto mode: use wss for any non-80 port (we run TLS on 8080) else ws
+const scheme = schemeEnv === 'auto' ? (port === 80 ? 'ws' : 'wss') : schemeEnv;
 
-const url = `${scheme}://${host}${(scheme === 'wss' && port === 443) || (scheme === 'ws' && port === 80) ? '' : `:${port}`}`;
+const url = `${scheme}://${host}:${port}`; // always include port (we don't rely on 443 default)
 console.log('Smoke test connecting to', url);
 const wsOptions = {};
 if (scheme === 'wss' && process.env.INSECURE === '1') {

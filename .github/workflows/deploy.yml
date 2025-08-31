@@ -80,7 +80,7 @@ jobs:
       - name: Smoke test (WebSocket/WSS ping)
         env:
           HOST: ${{ steps.ec2.outputs.public-dns }}
-          PORT: 443
+          PORT: 8080
           SCHEME: auto
         run: |
           node scripts/smoke-ws.js
