@@ -23,7 +23,7 @@ npm run build
 npm start
 ```
 
-Connect with a client:
+Connect with a client (plain ws locally):
 
 ```
 node -e "const WebSocket=require('ws');const ws=new WebSocket('ws://localhost:8080');ws.on('message',m=>console.log('msg',m.toString()));ws.on('open',()=>{ws.send('ping');setTimeout(()=>ws.send(JSON.stringify({hello:'world'})),500)});"
@@ -40,7 +40,36 @@ node -e "const WebSocket=require('ws');const ws=new WebSocket('ws://localhost:80
 
 ### Environment
 
-`PORT` (default 8080)
+`PORT` (default 8080; on EC2 we set 443 for wss via /etc/space-ship-socket/env)
+
+### Enabling WSS (TLS)
+
+The server auto-detects TLS if it finds a certificate + key at:
+
+```
+/etc/space-ship-socket/certs/fullchain.pem
+/etc/space-ship-socket/certs/privkey.pem
+```
+
+Override paths with env vars `TLS_CERT_PATH` / `TLS_KEY_PATH` (add to `/etc/space-ship-socket/env`).
+
+Steps (example using certbot + standalone HTTP challenge, assuming DNS A record points to instance):
+
+1. SSH to instance.
+2. Install certbot: `sudo dnf install -y certbot`.
+3. Stop service temporarily if bound to 80 (not by default): `sudo systemctl stop space-ship-socket`.
+4. Run: `sudo certbot certonly --standalone -d your.domain.example`.
+5. Symlink or copy resulting `fullchain.pem` and `privkey.pem` into `/etc/space-ship-socket/certs/`.
+6. Ensure permissions: `sudo chown root:ec2-user /etc/space-ship-socket/certs/*.pem` and `sudo chmod 640 /etc/space-ship-socket/certs/*.pem`.
+7. Set PORT=443 in `/etc/space-ship-socket/env` (already defaulted) and restart: `sudo systemctl restart space-ship-socket`.
+
+Client connects with:
+
+```
+new WebSocket('wss://your.domain.example');
+```
+
+If cert/key absent, server falls back to plain ws on configured port.
 
 ---
 

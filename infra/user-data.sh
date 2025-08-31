@@ -10,6 +10,22 @@ APP_DIR=/opt/space-ship-socket
 mkdir -p "$APP_DIR"
 chown ec2-user:ec2-user "$APP_DIR"
 
+# Prepare certificate directory (you can later place certs via deploy or use certbot)
+CERT_DIR=/etc/space-ship-socket/certs
+mkdir -p "$CERT_DIR"
+chmod 750 /etc/space-ship-socket || true
+
+ENV_FILE=/etc/space-ship-socket/env
+if [[ ! -f "$ENV_FILE" ]]; then
+	cat >"$ENV_FILE" <<'ENV'
+# Environment overrides for space-ship-socket
+# Uncomment and set if you provide custom cert locations
+# TLS_CERT_PATH=/etc/space-ship-socket/certs/fullchain.pem
+# TLS_KEY_PATH=/etc/space-ship-socket/certs/privkey.pem
+PORT=443
+ENV
+fi
+
 cat >/etc/systemd/system/space-ship-socket.service <<'SERVICE'
 [Unit]
 Description=Space Ship Socket WebSocket Server
@@ -19,6 +35,7 @@ After=network.target
 Type=simple
 WorkingDirectory=/opt/space-ship-socket
 Environment=NODE_ENV=production
+EnvironmentFile=-/etc/space-ship-socket/env
 ExecStart=/usr/bin/node dist/src/server.js
 Restart=on-failure
 User=ec2-user

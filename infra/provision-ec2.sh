@@ -39,8 +39,14 @@ else
   CREATED_SG=0
 fi
 
-# Always ensure WebSocket port 8080 open (idempotent)
+# Always ensure WebSocket port 8080 open (idempotent) – legacy/plain WS (can be removed once 443 only)
 aws ec2 authorize-security-group-ingress --region "$REGION" --group-id "$SG_ID" --ip-permissions 'IpProtocol=tcp,FromPort=8080,ToPort=8080,IpRanges=[{CidrIp=0.0.0.0/0}]' >/dev/null 2>&1 || true
+
+# Open 443 for wss (TLS) access
+aws ec2 authorize-security-group-ingress --region "$REGION" --group-id "$SG_ID" --ip-permissions 'IpProtocol=tcp,FromPort=443,ToPort=443,IpRanges=[{CidrIp=0.0.0.0/0}]' >/dev/null 2>&1 || true
+
+# (Optional) Open 80 for ACME HTTP-01 challenges / redirects if you add certbot later
+aws ec2 authorize-security-group-ingress --region "$REGION" --group-id "$SG_ID" --ip-permissions 'IpProtocol=tcp,FromPort=80,ToPort=80,IpRanges=[{CidrIp=0.0.0.0/0}]' >/dev/null 2>&1 || true
 
 # SSH ingress strategy:
 # NEW DEFAULT: open SSH (22) to the world 0.0.0.0/0 unless you explicitly set a narrower list.
