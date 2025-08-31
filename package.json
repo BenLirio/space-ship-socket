@@ -9,7 +9,8 @@
     "build": "tsc --build",
     "start": "node dist/server.js",
     "lint": "eslint . --ext .ts",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test": "node --loader ts-node/esm test/integration/basic.test.ts"
   },
   "keywords": [
     "websocket",
