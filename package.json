@@ -10,7 +10,8 @@
     "start": "node dist/server.js",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write .",
-    "test": "node --loader ts-node/esm test/integration/basic.test.ts"
+    "test": "node --loader ts-node/esm test/integration/basic.test.ts",
+    "smoke": "node scripts/smoke-ws.js"
   },
   "keywords": [
     "websocket",

@@ -19,7 +19,7 @@ After=network.target
 Type=simple
 WorkingDirectory=/opt/space-ship-socket
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/node dist/server.js
+ExecStart=/usr/bin/node dist/src/server.js
 Restart=on-failure
 User=ec2-user
 Group=ec2-user

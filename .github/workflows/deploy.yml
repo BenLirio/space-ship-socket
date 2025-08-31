@@ -81,4 +81,4 @@ jobs:
         env:
           HOST: ${{ steps.ec2.outputs.public-dns }}
         run: |
-          node -e "const WebSocket=require('ws');const host=process.env.HOST;const ws=new WebSocket('ws://'+host+':8080');let ok=false;ws.on('open',()=>ws.send('ping'));ws.on('message',m=>{if(m.toString().includes('pong')){ok=true;console.log('Received pong');ws.close();}});ws.on('close',()=>{if(!ok){console.error('Did not receive pong');process.exit(1)}});setTimeout(()=>{console.error('Timeout');process.exit(1)},8000);"
+          node scripts/smoke-ws.js
