@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* eslint-env node */
-// Simple WebSocket/WSS smoke test connecting to a host and expecting a pong reply.
+// Simple WebSocket/WSS smoke test connecting to a host and expecting an echo pong reply.
 // Usage: HOST=your-host [PORT=8080] [SCHEME=ws|wss] [INSECURE=1] node scripts/smoke-ws.js
 // Defaults: PORT=8080 SCHEME=ws; INSECURE=1 only affects wss (disables TLS verification).
 import { WebSocket } from 'ws';
@@ -50,17 +50,31 @@ function connect() {
 
 function attachHandlers() {
   ws.on('open', () => {
-    ws.send('ping');
+    ws.send(JSON.stringify({ type: 'ping' }));
   });
 
   ws.on('message', (data) => {
     const txt = data.toString();
-    if (txt.includes('pong')) {
+    let parsed;
+    try {
+      parsed = JSON.parse(txt);
+    } catch {
+      // legacy/raw fallback
+      if (txt.includes('pong')) {
+        gotPong = true;
+        console.log('Received legacy pong string');
+        ws.close();
+      } else {
+        console.log('Received non-pong raw message:', txt.slice(0, 120));
+      }
+      return;
+    }
+    if (parsed && parsed.type === 'echo' && parsed.payload === 'pong') {
       gotPong = true;
-      console.log('Received pong');
+      console.log('Received structured pong');
       ws.close();
     } else {
-      console.log('Received non-pong message:', txt.slice(0, 100));
+      console.log('Received other message:', txt.slice(0, 120));
     }
   });
 

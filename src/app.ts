@@ -8,6 +8,14 @@ export interface OutgoingMessage {
   payload?: unknown;
 }
 
+// Incoming messages now follow a { type, body } shape. Body is optional.
+export interface IncomingMessage {
+  type: string;
+  body?: unknown;
+  // Allow arbitrary extra fields if needed for future extensibility
+  [k: string]: unknown;
+}
+
 export interface StartedServer {
   wss: WebSocketServer;
   port: number;
