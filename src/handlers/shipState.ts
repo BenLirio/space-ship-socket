@@ -11,7 +11,8 @@ function isVector2(v: unknown): v is { x: number; y: number } {
   return typeof rec.x === 'number' && typeof rec.y === 'number';
 }
 
-function isShipState(p: unknown): p is ShipState {
+// Validate only the client-provided subset (without lastUpdatedAt which server injects)
+function isShipState(p: unknown): p is Omit<ShipState, 'lastUpdatedAt'> {
   const obj = p as Record<string, unknown>;
   if (!obj || typeof obj !== 'object') return false;
   const physics = obj.physics as Record<string, unknown> | undefined;
@@ -31,7 +32,8 @@ export function handleShipState(wss: WebSocketServer, socket: WebSocket, msg: In
   if (!globalThis.__SPACE_SHIP_GAME_LOOP__) return; // Should not happen, defensive
   const gameState = globalThis.__SPACE_SHIP_GAME_LOOP__.gameState;
   const entityId = (socket as CustomWebSocket).id;
-  gameState.ships[entityId] = payload;
+  const enriched: ShipState = { ...payload, lastUpdatedAt: Date.now() };
+  gameState.ships[entityId] = enriched;
   // Immediately broadcast updated snapshot (could be throttled if needed)
   broadcast(wss, { type: 'gameState', payload: gameState });
 }

@@ -13,6 +13,8 @@ export interface ShipState {
   appearance: {
     shipImageUrl: string;
   };
+  /** Epoch ms updated by server whenever a shipState message is received */
+  lastUpdatedAt: number;
 }
 
 export interface GameState {

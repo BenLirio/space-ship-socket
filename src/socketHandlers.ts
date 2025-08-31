@@ -42,7 +42,21 @@ export function attachSocketHandlers(wss: WebSocketServer) {
   if (!globalThis.__SPACE_SHIP_GAME_LOOP__) {
     const dynamicState: GameState = { ships: {} };
     const interval = setInterval(() => {
-      // Periodic broadcast snapshot
+      // Purge stale ships before broadcasting
+      const now = Date.now();
+      const EXPIRY_MS = 5000;
+      let purged = 0;
+      for (const [id, ship] of Object.entries(dynamicState.ships)) {
+        if (now - ship.lastUpdatedAt > EXPIRY_MS) {
+          delete dynamicState.ships[id];
+          purged++;
+        }
+      }
+      if (purged) {
+        // Optionally log purge for observability
+        console.log(`[gameLoop] Purged ${purged} stale ship(s)`);
+      }
+      // Periodic broadcast snapshot (post-purge)
       broadcast(wss, { type: 'gameState', payload: dynamicState });
     }, 1000); // TODO: tune tick rate
 
