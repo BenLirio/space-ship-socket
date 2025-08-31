@@ -81,6 +81,6 @@ jobs:
         env:
           HOST: ${{ vars.HOST }}
           PORT: 8080
-          SCHEME: auto
+          SCHEME: wss
         run: |
           node scripts/smoke-ws.js
