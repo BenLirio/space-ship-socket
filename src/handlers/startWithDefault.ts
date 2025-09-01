@@ -6,9 +6,15 @@ import type { CustomWebSocket } from '../types/socket.js';
 import type { ShipState } from '../types/game.js';
 import { getGameState } from '../gameLoop.js';
 
-// Constant default ship image URL provided per requirements
-const DEFAULT_SHIP_IMAGE_URL =
-  'https://space-ship-sprites.s3.us-east-1.amazonaws.com/generated/0527922c-3c69-493e-8528-cd65cb5ee06a.png';
+// Default generated sprites (idle + thrusters)
+const DEFAULT_SHIP_SPRITES = {
+  idle: {
+    url: 'https://space-ship-sprites.s3.amazonaws.com/generated/9244eb77-c7cc-44e8-b9f5-059d0d5f5132-idle.png',
+  },
+  thrusters: {
+    url: 'https://space-ship-sprites.s3.amazonaws.com/generated/9244eb77-c7cc-44e8-b9f5-059d0d5f5132.png',
+  },
+} as const;
 
 interface StartWithDefaultBody {
   userId?: string; // optional explicit user id (falls back to socket id)
@@ -27,11 +33,9 @@ export function handleStartWithDefault(
     body?.userId && typeof body.userId === 'string' ? body.userId : (socket as CustomWebSocket).id;
 
   const ship: ShipState = {
-    physics: {
-      position: { x: 0, y: 0 },
-      rotation: 0,
-    },
-    appearance: { shipImageUrl: DEFAULT_SHIP_IMAGE_URL },
+    physics: { position: { x: 0, y: 0 }, rotation: 0 },
+    sprites: { ...DEFAULT_SHIP_SPRITES },
+    appearance: { shipImageUrl: DEFAULT_SHIP_SPRITES.idle.url },
     lastUpdatedAt: Date.now(),
   };
 
