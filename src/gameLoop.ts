@@ -1,6 +1,6 @@
 import type { WebSocketServer } from 'ws';
 import { broadcast } from './socketUtils.js';
-import type { GameState, ShipState } from './types/game.js';
+import type { GameState, ShipState, ProjectileState } from './types/game.js';
 
 // ---------------------------------------------------------------------------
 // Authoritative simulation + broadcast loops
@@ -20,6 +20,7 @@ interface InputState {
   keysDown: Set<string>;
   joystick?: { x: number; y: number }; // raw input -y = up (client dependent)
   lastInputAt: number; // epoch ms
+  lastFireAt?: number; // cooldown tracking
 }
 
 interface InternalLoopState {
@@ -66,7 +67,7 @@ export function recordInput(
 export function initGameLoop(wss: WebSocketServer): InternalLoopState {
   if (loop) return loop;
 
-  const gameState: GameState = { ships: {} };
+  const gameState: GameState = { ships: {}, projectiles: [] };
   const inputs: Record<string, InputState> = {};
 
   // Simulation timing
@@ -171,7 +172,50 @@ export function initGameLoop(wss: WebSocketServer): InternalLoopState {
       }
     }
 
+    // Firing logic (SPACE key pressed) with simple cooldown
+    if (input && input.keysDown.has('SPACE')) {
+      const now = Date.now();
+      const COOLDOWN_MS = 250; // 4 shots per second
+      if (!input.lastFireAt || now - input.lastFireAt >= COOLDOWN_MS) {
+        input.lastFireAt = now;
+        spawnProjectile(ship);
+      }
+    }
+
     ship.lastUpdatedAt = Date.now();
+  }
+
+  // Projectile constants
+  const PROJECTILE_SPEED = 500; // units/s
+  const PROJECTILE_LIFETIME_MS = 3000; // time before auto-despawn
+  function spawnProjectile(ship: ShipState) {
+    const angle = ship.physics.rotation - Math.PI / 2; // forward
+    const dirX = Math.cos(angle);
+    const dirY = Math.sin(angle);
+    const muzzleOffset = 30; // spawn a bit ahead of ship nose
+    const posX = ship.physics.position.x + dirX * muzzleOffset;
+    const posY = ship.physics.position.y + dirY * muzzleOffset;
+    const proj: ProjectileState = {
+      id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      ownerId: Object.entries(loop!.gameState.ships).find(([, s]) => s === ship)?.[0] || 'unknown',
+      position: { x: posX, y: posY },
+      velocity: { x: dirX * PROJECTILE_SPEED, y: dirY * PROJECTILE_SPEED },
+      rotation: ship.physics.rotation,
+      createdAt: Date.now(),
+    };
+    gameState.projectiles.push(proj);
+  }
+
+  function simulateProjectiles(dt: number) {
+    const now = Date.now();
+    // Integrate and cull aged projectiles
+    gameState.projectiles = gameState.projectiles.filter((p) => {
+      const age = now - p.createdAt;
+      if (age > PROJECTILE_LIFETIME_MS) return false;
+      p.position.x += p.velocity.x * dt;
+      p.position.y += p.velocity.y * dt;
+      return true;
+    });
   }
 
   const simInterval = setInterval(() => {
@@ -180,6 +224,8 @@ export function initGameLoop(wss: WebSocketServer): InternalLoopState {
       const input = inputs[id];
       simulateShip(ship, input);
     }
+    // Projectiles simulation (same fixed dt)
+    simulateProjectiles(SIM_DT);
     // Purge ships whose last input is too old (avoid permanent ghosts)
     const now = Date.now();
     let purged = 0;

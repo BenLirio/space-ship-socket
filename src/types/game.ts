@@ -27,10 +27,21 @@ export interface ShipState {
 
 export interface GameState {
   ships: Record<EntityId, ShipState>;
+  /** Active projectiles in the world */
+  projectiles: ProjectileState[];
 }
 
 export interface ShipPhysics {
   position: Vector2;
   rotation: number;
   velocity?: Vector2; // linear velocity (units/s)
+}
+
+export interface ProjectileState {
+  id: string;
+  ownerId: EntityId;
+  position: Vector2;
+  velocity: Vector2;
+  rotation: number; // for client-side orientation (rad)
+  createdAt: number; // epoch ms
 }
