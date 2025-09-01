@@ -6,10 +6,7 @@ export interface Vector2 {
 }
 
 export interface ShipState {
-  physics: {
-    position: Vector2;
-    rotation: number;
-  };
+  physics: ShipPhysics;
   appearance: {
     shipImageUrl: string;
   };
@@ -19,4 +16,10 @@ export interface ShipState {
 
 export interface GameState {
   ships: Record<EntityId, ShipState>;
+}
+
+export interface ShipPhysics {
+  position: Vector2;
+  rotation: number;
+  velocity?: Vector2; // linear velocity (units/s)
 }
