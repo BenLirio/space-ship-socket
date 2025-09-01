@@ -15,12 +15,19 @@ const MAX_SPEED = 260; // hard clamp so analog & keyboard equal
 const ROTATE_SPEED = Math.PI; // rad / s at full rotate input
 const LINEAR_DAMPING = 0.9; // approx damping factor when coasting
 const STICK_DEADZONE = 0.15; // radial deadzone for analog stick
+// Muzzle flash duration (ms) after a projectile is fired; adjustable (or via env override)
+const MUZZLE_FLASH_DURATION_MS = Number(process.env.MUZZLE_FLASH_DURATION_MS) || 150; // visible window
+// Firing rate configuration (shots per second). Override with env FIRE_RATE_HZ.
+const FIRE_RATE_HZ_ENV = Number(process.env.FIRE_RATE_HZ);
+const FIRE_RATE_HZ = FIRE_RATE_HZ_ENV > 0 ? FIRE_RATE_HZ_ENV : 4; // default 4 shots/sec
+const FIRE_COOLDOWN_MS = 1000 / FIRE_RATE_HZ;
 
 interface InputState {
   keysDown: Set<string>;
   joystick?: { x: number; y: number }; // raw input -y = up (client dependent)
   lastInputAt: number; // epoch ms
   lastFireAt?: number; // cooldown tracking
+  muzzleFlashUntil?: number; // epoch ms until which muzzle flash is considered active
 }
 
 interface InternalLoopState {
@@ -81,6 +88,8 @@ export function initGameLoop(wss: WebSocketServer): InternalLoopState {
     // Provide defaults when no input yet
     const keysDown = input?.keysDown ?? new Set<string>();
     const joystick = input?.joystick;
+
+    // (Time-based muzzle flash handled via muzzleFlashUntil timestamp)
 
     // --- Input interpretation (mirrors old handler logic) ---
     let thrustInput = 0; // -1..1
@@ -159,26 +168,54 @@ export function initGameLoop(wss: WebSocketServer): InternalLoopState {
 
     // Dynamic sprite selection each sim tick (if sprites present)
     if (ship.sprites) {
-      const muzzleActive = keysDown.has('SPACE'); // space bar
-      // Determine desired key based on thrust & muzzle states
-      let desired: string | undefined;
-      if (thrustActive && muzzleActive) desired = 'trustersOnMuzzleOn';
-      else if (!thrustActive && muzzleActive) desired = 'trustersOfMuzzleOn';
-      else if (thrustActive && !muzzleActive) desired = 'thrustersOnMuzzleOf';
-      else desired = 'thrustersOfMuzzleOf';
-      const nextUrl = (ship.sprites as Record<string, { url: string } | undefined>)[desired]?.url;
-      if (nextUrl && ship.appearance.shipImageUrl !== nextUrl) {
-        ship.appearance.shipImageUrl = nextUrl;
+      // Muzzle flash active during configured duration after firing
+      const now = Date.now();
+      const muzzleActive =
+        !!input && input.muzzleFlashUntil !== undefined && now < input.muzzleFlashUntil;
+
+      // Handle both correct and typo'd variant keys. We search ordered lists.
+      const variantOrder: {
+        thrust: boolean;
+        muzzle: boolean;
+        keys: string[];
+      }[] = [
+        { thrust: true, muzzle: true, keys: ['thrustersOnMuzzleOn', 'trustersOnMuzzleOn'] },
+        { thrust: false, muzzle: true, keys: ['thrustersOfMuzzleOn', 'trustersOfMuzzleOn'] },
+        { thrust: true, muzzle: false, keys: ['thrustersOnMuzzleOf', 'trustersOnMuzzleOf'] },
+        { thrust: false, muzzle: false, keys: ['thrustersOfMuzzleOf', 'trustersOfMuzzleOf'] },
+      ];
+
+      function resolveVariant(thrust: boolean, muzzle: boolean): { url: string } | undefined {
+        for (const v of variantOrder) {
+          if (v.thrust === thrust && v.muzzle === muzzle) {
+            for (const key of v.keys) {
+              const found = (ship.sprites as Record<string, { url: string } | undefined>)[key];
+              if (found?.url) return found;
+            }
+          }
+        }
+        return undefined;
+      }
+
+      // Desired variant based on current state
+      let variant = resolveVariant(thrustActive, muzzleActive);
+      // If muzzle variant missing, gracefully fall back to same thrust + muzzle=false
+      if (!variant && muzzleActive) variant = resolveVariant(thrustActive, false);
+      // Final fallback: any non-muzzle, non-thrust specific baseline
+      if (!variant) variant = resolveVariant(false, false) || resolveVariant(true, false);
+
+      if (variant && variant.url && ship.appearance.shipImageUrl !== variant.url) {
+        ship.appearance.shipImageUrl = variant.url;
       }
     }
 
-    // Firing logic (SPACE key pressed) with simple cooldown
+    // Firing logic (SPACE key pressed) with 1s cooldown; muzzle flash lasts configurable duration
     if (input && input.keysDown.has('SPACE')) {
       const now = Date.now();
-      const COOLDOWN_MS = 250; // 4 shots per second
-      if (!input.lastFireAt || now - input.lastFireAt >= COOLDOWN_MS) {
+      if (!input.lastFireAt || now - input.lastFireAt >= FIRE_COOLDOWN_MS) {
         input.lastFireAt = now;
         spawnProjectile(ship);
+        input.muzzleFlashUntil = now + MUZZLE_FLASH_DURATION_MS; // visible starting immediately
       }
     }
 
