@@ -8,16 +8,16 @@ import { getGameState } from '../game/loop.js';
 
 // Default generated sprites (four variants)
 const DEFAULT_SHIP_SPRITES = {
-  trustersOnMuzzleOn: {
+  thrustersOnMuzzleOn: {
     url: 'https://space-ship-sprites.s3.amazonaws.com/generated/d3a3bb9e-5617-434b-a505-332c84c41f8b.png',
   },
-  trustersOfMuzzleOn: {
+  thrustersOffMuzzleOn: {
     url: 'https://space-ship-sprites.s3.amazonaws.com/generated/d3a3bb9e-5617-434b-a505-332c84c41f8b-thrustersOff-muzzleOn.png',
   },
-  thrustersOnMuzzleOf: {
+  thrustersOnMuzzleOff: {
     url: 'https://space-ship-sprites.s3.amazonaws.com/generated/d3a3bb9e-5617-434b-a505-332c84c41f8b-thrustersOn-muzzleOff.png',
   },
-  thrustersOfMuzzleOf: {
+  thrustersOffMuzzleOff: {
     url: 'https://space-ship-sprites.s3.amazonaws.com/generated/d3a3bb9e-5617-434b-a505-332c84c41f8b-thrustersOff-muzzleOff.png',
   },
 } as const;
@@ -41,7 +41,7 @@ export function handleStartWithDefault(
   const ship: ShipState = {
     physics: { position: { x: 0, y: 0 }, rotation: 0 },
     sprites: { ...DEFAULT_SHIP_SPRITES },
-    appearance: { shipImageUrl: DEFAULT_SHIP_SPRITES.thrustersOfMuzzleOf.url },
+    appearance: { shipImageUrl: DEFAULT_SHIP_SPRITES.thrustersOffMuzzleOff.url },
     lastUpdatedAt: Date.now(),
   };
 

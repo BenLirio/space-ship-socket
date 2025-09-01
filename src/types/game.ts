@@ -7,11 +7,12 @@ export interface Vector2 {
 
 // Sprite variants keyed by state name (matches generator response "sprites")
 export interface ShipSprites {
-  trustersOnMuzzleOn?: { url: string }; // (typo preserved from generator?)
-  trustersOfMuzzleOn?: { url: string };
-  thrustersOnMuzzleOf?: { url: string };
-  thrustersOfMuzzleOf?: { url: string };
-  [k: string]: { url: string } | undefined; // future expansion / corrected variants
+  // Canonical sprite variant keys (v2.0.0+)
+  thrustersOnMuzzleOn?: { url: string };
+  thrustersOffMuzzleOn?: { url: string };
+  thrustersOnMuzzleOff?: { url: string };
+  thrustersOffMuzzleOff?: { url: string };
+  [k: string]: { url: string } | undefined; // allow future expansion
 }
 
 export interface ShipState {

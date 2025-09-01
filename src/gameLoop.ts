@@ -174,15 +174,11 @@ export function initGameLoop(wss: WebSocketServer): InternalLoopState {
         !!input && input.muzzleFlashUntil !== undefined && now < input.muzzleFlashUntil;
 
       // Handle both correct and typo'd variant keys. We search ordered lists.
-      const variantOrder: {
-        thrust: boolean;
-        muzzle: boolean;
-        keys: string[];
-      }[] = [
-        { thrust: true, muzzle: true, keys: ['thrustersOnMuzzleOn', 'trustersOnMuzzleOn'] },
-        { thrust: false, muzzle: true, keys: ['thrustersOfMuzzleOn', 'trustersOfMuzzleOn'] },
-        { thrust: true, muzzle: false, keys: ['thrustersOnMuzzleOf', 'trustersOnMuzzleOf'] },
-        { thrust: false, muzzle: false, keys: ['thrustersOfMuzzleOf', 'trustersOfMuzzleOf'] },
+      const variantOrder: { thrust: boolean; muzzle: boolean; keys: string[] }[] = [
+        { thrust: true, muzzle: true, keys: ['thrustersOnMuzzleOn'] },
+        { thrust: false, muzzle: true, keys: ['thrustersOffMuzzleOn'] },
+        { thrust: true, muzzle: false, keys: ['thrustersOnMuzzleOff'] },
+        { thrust: false, muzzle: false, keys: ['thrustersOffMuzzleOff'] },
       ];
 
       function resolveVariant(thrust: boolean, muzzle: boolean): { url: string } | undefined {

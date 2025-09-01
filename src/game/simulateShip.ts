@@ -104,10 +104,10 @@ export function simulateShip(
       !!input && input.muzzleFlashUntil !== undefined && now < input.muzzleFlashUntil;
 
     const variantOrder: { thrust: boolean; muzzle: boolean; keys: string[] }[] = [
-      { thrust: true, muzzle: true, keys: ['thrustersOnMuzzleOn', 'trustersOnMuzzleOn'] },
-      { thrust: false, muzzle: true, keys: ['thrustersOfMuzzleOn', 'trustersOfMuzzleOn'] },
-      { thrust: true, muzzle: false, keys: ['thrustersOnMuzzleOf', 'trustersOnMuzzleOf'] },
-      { thrust: false, muzzle: false, keys: ['thrustersOfMuzzleOf', 'trustersOfMuzzleOf'] },
+      { thrust: true, muzzle: true, keys: ['thrustersOnMuzzleOn'] },
+      { thrust: false, muzzle: true, keys: ['thrustersOffMuzzleOn'] },
+      { thrust: true, muzzle: false, keys: ['thrustersOnMuzzleOff'] },
+      { thrust: false, muzzle: false, keys: ['thrustersOffMuzzleOff'] },
     ];
 
     function resolveVariant(thrust: boolean, muzzle: boolean): { url: string } | undefined {

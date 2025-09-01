@@ -73,6 +73,21 @@ If cert/key absent, server falls back to plain ws on configured port.
 
 MIT License
 
+## Migration: 1.x -> 2.0.0
+
+Sprite sheet response keys have been corrected. Old typo keys (`trusters*` / `thrustersOnMuzzleOf` / `thrustersOfMuzzleOf`) are replaced by:
+
+| Old Key               | New Key                 |
+| --------------------- | ----------------------- |
+| `trustersOnMuzzleOn`  | `thrustersOnMuzzleOn`   |
+| `trustersOfMuzzleOn`  | `thrustersOffMuzzleOn`  |
+| `thrustersOnMuzzleOf` | `thrustersOnMuzzleOff`  |
+| `thrustersOfMuzzleOf` | `thrustersOffMuzzleOff` |
+
+Update any client code accessing `sprites` variants. The server no longer emits legacy keys.
+
+Note: The `generate-space-ship` endpoint now returns only the primary variant (`thrustersOnMuzzleOn`) initially. Additional variants are populated later (if requested) via the sprite sheet expansion (`generate-sprite-sheet`). Client code should not assume placeholder keys for the other variants will be present.
+
 ## Deployment (AWS EC2 + GitHub Actions)
 
 This repo includes an opinionated, minimal setup to deploy the built WebSocket server to a single Amazon EC2 instance using a GitHub Actions workflow.

@@ -97,8 +97,10 @@ export async function handleStartWithPrompt(
       }
       sprites = filtered;
       imageUrl =
-        sprites['thrustersOfMuzzleOf']?.url ||
-        sprites['trustersOfMuzzleOn']?.url ||
+        sprites['thrustersOffMuzzleOff']?.url ||
+        sprites['thrustersOffMuzzleOn']?.url ||
+        sprites['thrustersOnMuzzleOff']?.url ||
+        sprites['thrustersOnMuzzleOn']?.url ||
         Object.values(sprites).find((s) => s.url)?.url;
     } else if (data && typeof data.imageUrl === 'string' && data.imageUrl) {
       imageUrl = data.imageUrl;
@@ -153,8 +155,9 @@ export async function handleStartWithPrompt(
             if (v?.url) merged[k] = { url: v.url };
           }
           ship.sprites = merged;
-          if (merged['thrustersOfMuzzleOf']?.url) {
-            ship.appearance.shipImageUrl = merged['thrustersOfMuzzleOf']!.url;
+          // Prefer canonical idle (thrusters off + muzzle off) variant if present
+          if (merged['thrustersOffMuzzleOff']?.url) {
+            ship.appearance.shipImageUrl = merged['thrustersOffMuzzleOff']!.url;
           }
           ship.lastUpdatedAt = Date.now();
           broadcast(wss, { type: 'gameState', payload: gameState });
