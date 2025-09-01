@@ -6,13 +6,19 @@ import type { CustomWebSocket } from '../types/socket.js';
 import type { ShipState } from '../types/game.js';
 import { getGameState } from '../gameLoop.js';
 
-// Default generated sprites (idle + thrusters)
+// Default generated sprites (four variants)
 const DEFAULT_SHIP_SPRITES = {
-  idle: {
-    url: 'https://space-ship-sprites.s3.amazonaws.com/generated/9244eb77-c7cc-44e8-b9f5-059d0d5f5132-idle.png',
+  trustersOnMuzzleOn: {
+    url: 'https://space-ship-sprites.s3.amazonaws.com/generated/d3a3bb9e-5617-434b-a505-332c84c41f8b.png',
   },
-  thrusters: {
-    url: 'https://space-ship-sprites.s3.amazonaws.com/generated/9244eb77-c7cc-44e8-b9f5-059d0d5f5132.png',
+  trustersOfMuzzleOn: {
+    url: 'https://space-ship-sprites.s3.amazonaws.com/generated/d3a3bb9e-5617-434b-a505-332c84c41f8b-thrustersOff-muzzleOn.png',
+  },
+  thrustersOnMuzzleOf: {
+    url: 'https://space-ship-sprites.s3.amazonaws.com/generated/d3a3bb9e-5617-434b-a505-332c84c41f8b-thrustersOn-muzzleOff.png',
+  },
+  thrustersOfMuzzleOf: {
+    url: 'https://space-ship-sprites.s3.amazonaws.com/generated/d3a3bb9e-5617-434b-a505-332c84c41f8b-thrustersOff-muzzleOff.png',
   },
 } as const;
 
@@ -35,7 +41,7 @@ export function handleStartWithDefault(
   const ship: ShipState = {
     physics: { position: { x: 0, y: 0 }, rotation: 0 },
     sprites: { ...DEFAULT_SHIP_SPRITES },
-    appearance: { shipImageUrl: DEFAULT_SHIP_SPRITES.idle.url },
+    appearance: { shipImageUrl: DEFAULT_SHIP_SPRITES.thrustersOfMuzzleOf.url },
     lastUpdatedAt: Date.now(),
   };
 

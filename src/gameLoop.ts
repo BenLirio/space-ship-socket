@@ -158,16 +158,16 @@ export function initGameLoop(wss: WebSocketServer): InternalLoopState {
 
     // Dynamic sprite selection each sim tick (if sprites present)
     if (ship.sprites) {
-      const thrustersUrl = ship.sprites.thrusters?.url;
-      const idleUrl = ship.sprites.idle?.url;
-      if (thrustActive && thrustersUrl) {
-        if (ship.appearance.shipImageUrl !== thrustersUrl) {
-          ship.appearance.shipImageUrl = thrustersUrl;
-        }
-      } else if (idleUrl) {
-        if (ship.appearance.shipImageUrl !== idleUrl) {
-          ship.appearance.shipImageUrl = idleUrl;
-        }
+      const muzzleActive = keysDown.has('SPACE'); // space bar
+      // Determine desired key based on thrust & muzzle states
+      let desired: string | undefined;
+      if (thrustActive && muzzleActive) desired = 'trustersOnMuzzleOn';
+      else if (!thrustActive && muzzleActive) desired = 'trustersOfMuzzleOn';
+      else if (thrustActive && !muzzleActive) desired = 'thrustersOnMuzzleOf';
+      else desired = 'thrustersOfMuzzleOf';
+      const nextUrl = (ship.sprites as Record<string, { url: string } | undefined>)[desired]?.url;
+      if (nextUrl && ship.appearance.shipImageUrl !== nextUrl) {
+        ship.appearance.shipImageUrl = nextUrl;
       }
     }
 

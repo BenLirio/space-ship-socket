@@ -83,9 +83,11 @@ export async function handleStartWithPrompt(
     // New format may return a sprites object
     if (data && data.sprites && typeof data.sprites === 'object') {
       sprites = data.sprites;
-      const idleUrl = sprites.idle?.url;
-      const thrustersUrl = sprites.thrusters?.url;
-      imageUrl = idleUrl || thrustersUrl || Object.values(sprites)[0]?.url;
+      // Choose a default: prefer thrustersOfMuzzleOf (fully idle), else any deterministic first
+      imageUrl =
+        sprites['thrustersOfMuzzleOf']?.url ||
+        sprites['trustersOfMuzzleOn']?.url ||
+        Object.values(sprites)[0]?.url;
     } else if (data && typeof data.imageUrl === 'string' && data.imageUrl) {
       imageUrl = data.imageUrl;
     }
