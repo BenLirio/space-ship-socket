@@ -126,8 +126,9 @@ export function initGameLoop(wss: WebSocketServer): InternalLoopState {
     if (!ship.physics.velocity) ship.physics.velocity = { x: 0, y: 0 };
     const v = ship.physics.velocity;
 
+    const thrustActive = thrustInput !== 0;
     // Apply thrust
-    if (thrustInput !== 0) {
+    if (thrustActive) {
       const angle = ship.physics.rotation - Math.PI / 2; // align with previous logic
       const forwardX = Math.cos(angle);
       const forwardY = Math.sin(angle);
@@ -154,6 +155,21 @@ export function initGameLoop(wss: WebSocketServer): InternalLoopState {
     v.y = Number.isFinite(v.y) ? v.y : 0;
     ship.physics.position.x += v.x * SIM_DT;
     ship.physics.position.y += v.y * SIM_DT;
+
+    // Dynamic sprite selection each sim tick (if sprites present)
+    if (ship.sprites) {
+      const thrustersUrl = ship.sprites.state.thrusters?.url;
+      const idleUrl = ship.sprites.state.idle?.url;
+      if (thrustActive && thrustersUrl) {
+        if (ship.appearance.shipImageUrl !== thrustersUrl) {
+          ship.appearance.shipImageUrl = thrustersUrl;
+        }
+      } else if (idleUrl) {
+        if (ship.appearance.shipImageUrl !== idleUrl) {
+          ship.appearance.shipImageUrl = idleUrl;
+        }
+      }
+    }
 
     ship.lastUpdatedAt = Date.now();
   }

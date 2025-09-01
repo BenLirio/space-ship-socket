@@ -24,7 +24,9 @@ interface StartWithPromptPayload {
 }
 
 interface GenerateResponseOk {
-  imageUrl?: string;
+  imageUrl?: string; // legacy single image URL
+  requestId?: string; // new multi-state response fields
+  state?: Record<string, { url: string }>;
   [k: string]: unknown;
 }
 
@@ -65,6 +67,7 @@ export async function handleStartWithPrompt(
   const entityId = (socket as CustomWebSocket).id;
   sendJson(socket, { type: 'info', payload: 'generating ship...' });
   let imageUrl: string | undefined;
+  let sprites: { requestId: string; state: Record<string, { url: string }> } | undefined;
   try {
     const resp = await postJson(GENERATE_ENDPOINT, { prompt });
     if (!resp.ok) {
@@ -78,20 +81,36 @@ export async function handleStartWithPrompt(
       return sendJson(socket, { type: 'error', payload: msgStr });
     }
     const data = resp.json as GenerateResponseOk;
-    if (!data || typeof data.imageUrl !== 'string' || !data.imageUrl) {
-      return sendJson(socket, { type: 'error', payload: 'generation succeeded but no imageUrl' });
+    // New format may return a sprite state object
+    if (data && data.requestId && data.state && typeof data.requestId === 'string') {
+      sprites = { requestId: data.requestId, state: data.state || {} };
+      // Prefer idle, then thrusters, otherwise arbitrary first
+      const idleUrl = sprites.state.idle?.url;
+      const thrustersUrl = sprites.state.thrusters?.url;
+      imageUrl = idleUrl || thrustersUrl || Object.values(sprites.state)[0]?.url;
+    } else if (data && typeof data.imageUrl === 'string' && data.imageUrl) {
+      imageUrl = data.imageUrl;
     }
-    imageUrl = data.imageUrl;
+    if (!imageUrl) {
+      return sendJson(socket, {
+        type: 'error',
+        payload: 'generation succeeded but missing image(s)',
+      });
+    }
   } catch (err) {
     console.error('[startWithPrompt] generation error', err);
     return sendJson(socket, { type: 'error', payload: 'internal generation error' });
   }
 
-  const ship: ShipState = {
+  const base: ShipState = {
     physics: { position: { x: 0, y: 0 }, rotation: 0 },
     appearance: { shipImageUrl: imageUrl },
     lastUpdatedAt: Date.now(),
   };
+  if (sprites) {
+    base.sprites = { requestId: sprites.requestId, state: sprites.state };
+  }
+  const ship = base;
   gameState.ships[entityId] = ship;
 
   broadcast(wss, { type: 'gameState', payload: gameState });
