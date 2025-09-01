@@ -7,18 +7,19 @@ import type { ShipState } from '../types/game.js';
 import { getGameState } from '../game/loop.js';
 
 // Default generated sprites (four variants)
+// Updated default sheet (UUID 5e1edce8-b1c9-4370-9ad6-cb1bf65e59f7)
 const DEFAULT_SHIP_SPRITES = {
+  thrustersOnMuzzleOff: {
+    url: 'https://space-ship-sprites.s3.amazonaws.com/generated/5e1edce8-b1c9-4370-9ad6-cb1bf65e59f7.png',
+  },
   thrustersOnMuzzleOn: {
-    url: 'https://space-ship-sprites.s3.amazonaws.com/generated/d3a3bb9e-5617-434b-a505-332c84c41f8b.png',
+    url: 'https://space-ship-sprites.s3.amazonaws.com/generated/5e1edce8-b1c9-4370-9ad6-cb1bf65e59f7-thrustersOn-muzzleOn.png',
   },
   thrustersOffMuzzleOn: {
-    url: 'https://space-ship-sprites.s3.amazonaws.com/generated/d3a3bb9e-5617-434b-a505-332c84c41f8b-thrustersOff-muzzleOn.png',
-  },
-  thrustersOnMuzzleOff: {
-    url: 'https://space-ship-sprites.s3.amazonaws.com/generated/d3a3bb9e-5617-434b-a505-332c84c41f8b-thrustersOn-muzzleOff.png',
+    url: 'https://space-ship-sprites.s3.amazonaws.com/generated/5e1edce8-b1c9-4370-9ad6-cb1bf65e59f7-thrustersOff-muzzleOn.png',
   },
   thrustersOffMuzzleOff: {
-    url: 'https://space-ship-sprites.s3.amazonaws.com/generated/d3a3bb9e-5617-434b-a505-332c84c41f8b-thrustersOff-muzzleOff.png',
+    url: 'https://space-ship-sprites.s3.amazonaws.com/generated/5e1edce8-b1c9-4370-9ad6-cb1bf65e59f7-thrustersOff-muzzleOff.png',
   },
 } as const;
 
