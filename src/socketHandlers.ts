@@ -9,7 +9,7 @@ import { handleStartWithPrompt } from './handlers/startWithPrompt.js';
 import { handleInputSnapshot } from './handlers/inputSnapshot.js';
 import type { CustomWebSocket } from './types/socket.js';
 import { randomUUID } from 'crypto';
-import { initGameLoop } from './gameLoop.js';
+import { initGameLoop } from './game/loop.js';
 
 // Game loop moved to gameLoop.ts
 

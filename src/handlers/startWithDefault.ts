@@ -4,7 +4,7 @@ import type { IncomingMessage } from '../types/messages.js';
 import { broadcast, sendJson } from '../socketUtils.js';
 import type { CustomWebSocket } from '../types/socket.js';
 import type { ShipState } from '../types/game.js';
-import { getGameState } from '../gameLoop.js';
+import { getGameState } from '../game/loop.js';
 
 // Default generated sprites (four variants)
 const DEFAULT_SHIP_SPRITES = {

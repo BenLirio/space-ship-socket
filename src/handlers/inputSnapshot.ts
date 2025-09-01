@@ -2,7 +2,7 @@ import type { WebSocket } from 'ws';
 import type { WebSocketServer } from 'ws';
 import type { IncomingMessage } from '../types/messages.js';
 import type { CustomWebSocket } from '../types/socket.js';
-import { getGameState, recordInput } from '../gameLoop.js';
+import { getGameState, recordInput } from '../game/loop.js';
 
 // Minimal shape validation (optional fields ignored). We only care that it's an object.
 function isInputSnapshotPayload(v: unknown): v is Record<string, unknown> {

@@ -4,7 +4,7 @@ import type { IncomingMessage } from '../types/messages.js';
 import { sendJson, broadcast } from '../socketUtils.js';
 import type { ShipState } from '../types/game.js';
 import type { CustomWebSocket } from '../types/socket.js';
-import { getGameState } from '../gameLoop.js';
+import { getGameState } from '../game/loop.js';
 
 function isVector2(v: unknown): v is { x: number; y: number } {
   if (!v || typeof v !== 'object') return false;

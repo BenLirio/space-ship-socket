@@ -4,7 +4,7 @@ import type { IncomingMessage } from '../types/messages.js';
 import { broadcast, sendJson } from '../socketUtils.js';
 import type { CustomWebSocket } from '../types/socket.js';
 import type { ShipState } from '../types/game.js';
-import { getGameState } from '../gameLoop.js';
+import { getGameState } from '../game/loop.js';
 
 // Generation endpoint resolution order:
 // 1. Explicit env GENERATE_SHIP_URL
