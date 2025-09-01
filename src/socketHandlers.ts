@@ -5,6 +5,7 @@ import { sendJson } from './socketUtils.js';
 import { handlePing } from './handlers/ping.js';
 import { handleShipState } from './handlers/shipState.js';
 import { handleStartWithDefault } from './handlers/startWithDefault.js';
+import { handleStartWithPrompt } from './handlers/startWithPrompt.js';
 import { handleInputSnapshot } from './handlers/inputSnapshot.js';
 import { getGameState } from './gameLoop.js';
 import type { ShipState } from './types/game.js';
@@ -19,6 +20,7 @@ const specificHandlers = {
   ping: handlePing,
   shipState: handleShipState,
   startWithDefault: handleStartWithDefault,
+  startWithPrompt: handleStartWithPrompt,
   inputSnapshot: handleInputSnapshot,
 };
 const handlers: Record<
