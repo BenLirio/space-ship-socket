@@ -25,8 +25,7 @@ interface StartWithPromptPayload {
 
 interface GenerateResponseOk {
   imageUrl?: string; // legacy single image URL
-  requestId?: string; // new multi-state response fields
-  state?: Record<string, { url: string }>;
+  sprites?: Record<string, { url: string }>; // new multi-state response fields
   [k: string]: unknown;
 }
 
@@ -67,7 +66,7 @@ export async function handleStartWithPrompt(
   const entityId = (socket as CustomWebSocket).id;
   sendJson(socket, { type: 'info', payload: 'generating ship...' });
   let imageUrl: string | undefined;
-  let sprites: { requestId: string; state: Record<string, { url: string }> } | undefined;
+  let sprites: Record<string, { url: string }> | undefined;
   try {
     const resp = await postJson(GENERATE_ENDPOINT, { prompt });
     if (!resp.ok) {
@@ -81,13 +80,12 @@ export async function handleStartWithPrompt(
       return sendJson(socket, { type: 'error', payload: msgStr });
     }
     const data = resp.json as GenerateResponseOk;
-    // New format may return a sprite state object
-    if (data && data.requestId && data.state && typeof data.requestId === 'string') {
-      sprites = { requestId: data.requestId, state: data.state || {} };
-      // Prefer idle, then thrusters, otherwise arbitrary first
-      const idleUrl = sprites.state.idle?.url;
-      const thrustersUrl = sprites.state.thrusters?.url;
-      imageUrl = idleUrl || thrustersUrl || Object.values(sprites.state)[0]?.url;
+    // New format may return a sprites object
+    if (data && data.sprites && typeof data.sprites === 'object') {
+      sprites = data.sprites;
+      const idleUrl = sprites.idle?.url;
+      const thrustersUrl = sprites.thrusters?.url;
+      imageUrl = idleUrl || thrustersUrl || Object.values(sprites)[0]?.url;
     } else if (data && typeof data.imageUrl === 'string' && data.imageUrl) {
       imageUrl = data.imageUrl;
     }
@@ -107,9 +105,7 @@ export async function handleStartWithPrompt(
     appearance: { shipImageUrl: imageUrl },
     lastUpdatedAt: Date.now(),
   };
-  if (sprites) {
-    base.sprites = { requestId: sprites.requestId, state: sprites.state };
-  }
+  if (sprites) base.sprites = sprites;
   const ship = base;
   gameState.ships[entityId] = ship;
 

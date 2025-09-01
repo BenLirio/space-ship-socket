@@ -158,8 +158,8 @@ export function initGameLoop(wss: WebSocketServer): InternalLoopState {
 
     // Dynamic sprite selection each sim tick (if sprites present)
     if (ship.sprites) {
-      const thrustersUrl = ship.sprites.state.thrusters?.url;
-      const idleUrl = ship.sprites.state.idle?.url;
+      const thrustersUrl = ship.sprites.thrusters?.url;
+      const idleUrl = ship.sprites.idle?.url;
       if (thrustActive && thrustersUrl) {
         if (ship.appearance.shipImageUrl !== thrustersUrl) {
           ship.appearance.shipImageUrl = thrustersUrl;
