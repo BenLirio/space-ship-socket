@@ -19,6 +19,9 @@ const DEV_DEFAULT_GENERATE_SPRITE_SHEET_ENDPOINT = 'http://localhost:3000/genera
 const PROD_DEFAULT_RESIZE_ENDPOINT =
   'https://9rc13jr0p2.execute-api.us-east-1.amazonaws.com/resize';
 const DEV_DEFAULT_RESIZE_ENDPOINT = 'http://localhost:3000/resize';
+const PROD_DEFAULT_DIFF_BOUNDING_BOX_ENDPOINT =
+  'https://9rc13jr0p2.execute-api.us-east-1.amazonaws.com/diff-bounding-box';
+const DEV_DEFAULT_DIFF_BOUNDING_BOX_ENDPOINT = 'http://localhost:3000/diff-bounding-box';
 const GENERATE_ENDPOINT =
   process.env.GENERATE_SHIP_URL ||
   (process.env.NODE_ENV === 'production'
@@ -34,6 +37,11 @@ const RESIZE_ENDPOINT =
   (process.env.NODE_ENV === 'production'
     ? PROD_DEFAULT_RESIZE_ENDPOINT
     : DEV_DEFAULT_RESIZE_ENDPOINT);
+const DIFF_BOUNDING_BOX_ENDPOINT =
+  process.env.DIFF_BOUNDING_BOX_URL ||
+  (process.env.NODE_ENV === 'production'
+    ? PROD_DEFAULT_DIFF_BOUNDING_BOX_ENDPOINT
+    : DEV_DEFAULT_DIFF_BOUNDING_BOX_ENDPOINT);
 
 interface StartWithPromptPayload {
   prompt?: unknown;
@@ -277,6 +285,66 @@ export async function handleStartWithPrompt(
           ship.lastUpdatedAt = Date.now();
           broadcast(wss, { type: 'gameState', payload: gameState });
           sendJson(socket, { type: 'info', payload: 'ship sprites expanded' });
+
+          // Attempt to compute bullet origins by diffing thrustersOnMuzzleOff vs thrustersOnMuzzleOn (FULL size, not resized)
+          try {
+            const muzzleOffUrl = ship.sprites?.['thrustersOnMuzzleOff']?.url;
+            const muzzleOnUrl = ship.sprites?.['thrustersOnMuzzleOn']?.url;
+            if (muzzleOffUrl && muzzleOnUrl) {
+              const diffResp = await postJson(DIFF_BOUNDING_BOX_ENDPOINT, {
+                imageUrlA: muzzleOffUrl,
+                imageUrlB: muzzleOnUrl,
+                // Tuned parameters: tighter threshold & large box/pixel minimum to isolate muzzle flashes
+                threshold: 0.03,
+                minBoxArea: 500,
+                minClusterPixels: 500,
+              });
+              if (diffResp.ok && diffResp.json && typeof diffResp.json === 'object') {
+                const diffJson = diffResp.json as {
+                  boxes?: { x: number; y: number; width: number; height: number }[];
+                  imageWidth?: number;
+                  imageHeight?: number;
+                };
+                if (
+                  Array.isArray(diffJson.boxes) &&
+                  typeof diffJson.imageWidth === 'number' &&
+                  typeof diffJson.imageHeight === 'number'
+                ) {
+                  const fullW = diffJson.imageWidth;
+                  const fullH = diffJson.imageHeight;
+                  const cx = fullW / 2;
+                  const cy = fullH / 2;
+                  // Target displayed size (matches resize service request max 128). If actual resized differs
+                  // (non-square), we could optionally look it up; for now assume square scaling w.r.t original.
+                  const TARGET_SIZE = 128; // matches resize request maxWidth/maxHeight
+                  const scaleX = TARGET_SIZE / fullW;
+                  const scaleY = TARGET_SIZE / fullH;
+                  // Compute ORIGINS using geometric CENTER of each bounding box, then apply a fixed
+                  // downward ( +y ) offset so bullets originate slightly behind the brightest part of
+                  // the muzzle flash (closer to the barrel). Tunable constant below.
+                  const CENTER_Y_EXTRA = 20; // pixels in resized 128x128 local space (was 15; +10px per request)
+                  const scaledOrigins = diffJson.boxes.map((b) => {
+                    const centerOx = b.x + b.width / 2 - cx;
+                    const centerOy = b.y + b.height / 2 - cy; // +y down
+                    const scaledX = centerOx * scaleX;
+                    const scaledY = centerOy * scaleY + CENTER_Y_EXTRA; // push downward
+                    return { x: scaledX, y: scaledY };
+                  });
+                  if (scaledOrigins.length) {
+                    ship.bulletOrigins = scaledOrigins;
+                    ship.lastUpdatedAt = Date.now();
+                    broadcast(wss, { type: 'gameState', payload: gameState });
+                    sendJson(socket, {
+                      type: 'info',
+                      payload: `computed ${scaledOrigins.length} bullet origin(s)`,
+                    });
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            console.warn('[startWithPrompt] diff-bounding-box step failed', err);
+          }
         }
       } catch (err) {
         console.error('[startWithPrompt] sprite sheet expansion error', err);

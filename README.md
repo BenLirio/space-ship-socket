@@ -147,3 +147,19 @@ You can redeploy a previous commit by re-running the workflow on that commit. Fo
 - Add health endpoint & HTTP ALB.
 - Containerize & use ECS / Fargate or Elastic Beanstalk.
 - Use CodeDeploy or SSM Session Manager instead of raw SSH.
+
+## Bullet Origins (Dynamic Gun Positions)
+
+After sprite sheet expansion, the server now computes projectile origin points ("bulletOrigins") by diffing the full-size `thrustersOnMuzzleOff` vs `thrustersOnMuzzleOn` images using the `/diff-bounding-box` API (parameters: `threshold=0.03`, `minBoxArea=500`, `minClusterPixels=500`). Each connected component of muzzle flash difference that passes these filters yields a bounding box; the geometric center (relative to image center) is taken and then shifted downward (+y) by 25px in the 128x128 resized local space so shots appear to emerge from the barrel rather than the middle of the muzzle flash.
+
+Behavior:
+
+- If N bounding boxes are found, each press of fire spawns N projectiles (all sharing forward velocity).
+- Origins are stored per ship in `ship.bulletOrigins` as local-space coordinates (pixels) relative to the original full-size image center ( +x right, +y down ).
+- Origins are scaled from original image size (e.g. 1024x1024) into the 128x128 resized coordinate space used for rendering so they align with displayed sprites.
+- When firing, these are rotated by the ship's current rotation and translated into world space.
+- If no origins are computed (e.g. diff failed), a fallback twin-fire pattern is used.
+
+Environment override: set `DIFF_BOUNDING_BOX_URL` to point at a compatible endpoint (defaults follow the same prod/dev pattern as other generation services).
+
+Client Impact: `bulletOrigins` (if present) can be used for local muzzle flash effects or predictive UI. They are not required for compatibility; absence means server used fallback pattern.

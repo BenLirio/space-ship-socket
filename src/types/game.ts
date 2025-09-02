@@ -21,6 +21,12 @@ export interface ShipState {
   sprites?: ShipSprites;
   // Resized sprite variants (always preferred by server & clients). Mirrors keys of `sprites`.
   resizedSprites?: ShipSprites;
+  /** Local-space (image-centered) offsets where projectiles should originate.
+   *  Computed after sprite-sheet expansion by diffing thrustersOnMuzzleOff vs thrustersOnMuzzleOn.
+   *  Each origin is (x,y) in original (non-resized) image pixels relative to image center
+   *  (i.e. image center = 0,0; +x right; +y down). When firing we rotate + translate into world space
+   *  and also push slightly forward along the ship's forward vector. */
+  bulletOrigins?: Vector2[];
   appearance: {
     shipImageUrl: string;
   };
