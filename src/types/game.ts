@@ -19,6 +19,8 @@ export interface ShipState {
   physics: ShipPhysics;
   // Optional sprite variants (present when generated via prompt endpoint)
   sprites?: ShipSprites;
+  // Resized sprite variants (always preferred by server & clients). Mirrors keys of `sprites`.
+  resizedSprites?: ShipSprites;
   appearance: {
     shipImageUrl: string;
   };

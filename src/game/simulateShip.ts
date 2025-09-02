@@ -97,8 +97,8 @@ export function simulateShip(
   ship.physics.position.x += v.x * SIM_DT;
   ship.physics.position.y += v.y * SIM_DT;
 
-  // Dynamic sprite selection each sim tick (if sprites present)
-  if (ship.sprites) {
+  // Dynamic sprite selection each sim tick using resizedSprites only
+  if (ship.resizedSprites) {
     const now = Date.now();
     const muzzleActive =
       !!input && input.muzzleFlashUntil !== undefined && now < input.muzzleFlashUntil;
@@ -114,7 +114,7 @@ export function simulateShip(
       for (const v of variantOrder) {
         if (v.thrust === thrust && v.muzzle === muzzle) {
           for (const key of v.keys) {
-            const found = (ship.sprites as Record<string, { url: string } | undefined>)[key];
+            const found = (ship.resizedSprites as Record<string, { url: string } | undefined>)[key];
             if (found?.url) return found;
           }
         }

@@ -16,6 +16,9 @@ const DEV_DEFAULT_GENERATE_ENDPOINT = 'http://localhost:3000/generate-space-ship
 const PROD_DEFAULT_GENERATE_SPRITE_SHEET_ENDPOINT =
   'https://9rc13jr0p2.execute-api.us-east-1.amazonaws.com/generate-sprite-sheet';
 const DEV_DEFAULT_GENERATE_SPRITE_SHEET_ENDPOINT = 'http://localhost:3000/generate-sprite-sheet';
+const PROD_DEFAULT_RESIZE_ENDPOINT =
+  'https://9rc13jr0p2.execute-api.us-east-1.amazonaws.com/resize';
+const DEV_DEFAULT_RESIZE_ENDPOINT = 'http://localhost:3000/resize';
 const GENERATE_ENDPOINT =
   process.env.GENERATE_SHIP_URL ||
   (process.env.NODE_ENV === 'production'
@@ -26,6 +29,11 @@ const GENERATE_SPRITE_SHEET_ENDPOINT =
   (process.env.NODE_ENV === 'production'
     ? PROD_DEFAULT_GENERATE_SPRITE_SHEET_ENDPOINT
     : DEV_DEFAULT_GENERATE_SPRITE_SHEET_ENDPOINT);
+const RESIZE_ENDPOINT =
+  process.env.RESIZE_SPRITES_URL ||
+  (process.env.NODE_ENV === 'production'
+    ? PROD_DEFAULT_RESIZE_ENDPOINT
+    : DEV_DEFAULT_RESIZE_ENDPOINT);
 
 interface StartWithPromptPayload {
   prompt?: unknown;
@@ -75,6 +83,7 @@ export async function handleStartWithPrompt(
   sendJson(socket, { type: 'info', payload: 'generating ship...' });
   let imageUrl: string | undefined;
   let sprites: Record<string, { url?: string }> | undefined;
+  let resizedSprites: Record<string, { url: string }> | undefined;
   try {
     const resp = await postJson(GENERATE_ENDPOINT, { prompt });
     if (!resp.ok) {
@@ -111,17 +120,80 @@ export async function handleStartWithPrompt(
         payload: 'generation succeeded but missing image(s)',
       });
     }
+
+    // Always request resized versions for every url we currently have (single or multiple)
+    try {
+      const imageUrls = sprites
+        ? Object.values(sprites)
+            .map((s) => s.url)
+            .filter((u): u is string => typeof u === 'string' && !!u)
+        : [imageUrl];
+      const resizeResp = await postJson(RESIZE_ENDPOINT, {
+        imageUrls,
+        maxWidth: 128,
+        maxHeight: 128,
+      });
+      if (resizeResp.ok && resizeResp.json && typeof resizeResp.json === 'object') {
+        const rr = resizeResp.json as { items?: { sourceUrl?: string; resizedUrl?: string }[] };
+        if (Array.isArray(rr.items)) {
+          const map = new Map<string, string>();
+          for (const it of rr.items) {
+            if (it?.sourceUrl && it?.resizedUrl) map.set(it.sourceUrl, it.resizedUrl);
+          }
+          if (sprites) {
+            const rs: Record<string, { url: string }> = {};
+            for (const [k, v] of Object.entries(sprites)) {
+              if (v?.url) {
+                const resized = map.get(v.url);
+                if (resized) rs[k] = { url: resized };
+              }
+            }
+            resizedSprites = rs;
+          } else if (imageUrl) {
+            const resized = map.get(imageUrl);
+            if (resized) {
+              resizedSprites = { base: { url: resized } };
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[startWithPrompt] resize step failed', err);
+    }
+
+    // If resize failed produce a synthetic resizedSprites mapping pointing at originals so downstream logic
+    // (which always reads resizedSprites) still functions and never falls back to full-size lookup logic.
+    if (!resizedSprites) {
+      if (sprites) {
+        const rs: Record<string, { url: string }> = {};
+        for (const [k, v] of Object.entries(sprites)) if (v?.url) rs[k] = { url: v.url };
+        if (Object.keys(rs).length) resizedSprites = rs;
+      } else if (imageUrl) {
+        resizedSprites = { base: { url: imageUrl } };
+      }
+    }
   } catch (err) {
     console.error('[startWithPrompt] generation error', err);
     return sendJson(socket, { type: 'error', payload: 'internal generation error' });
   }
 
+  // At this point resizedSprites is guaranteed defined (fallback applied above)
+  resizedSprites = resizedSprites || ({} as Record<string, { url: string }>);
   const base: ShipState = {
     physics: { position: { x: 0, y: 0 }, rotation: 0 },
-    appearance: { shipImageUrl: imageUrl },
+    appearance: {
+      shipImageUrl:
+        resizedSprites['thrustersOffMuzzleOff']?.url ||
+        resizedSprites['thrustersOffMuzzleOn']?.url ||
+        resizedSprites['thrustersOnMuzzleOff']?.url ||
+        resizedSprites['thrustersOnMuzzleOn']?.url ||
+        Object.values(resizedSprites)[0]?.url ||
+        imageUrl,
+    },
     lastUpdatedAt: Date.now(),
   };
   if (sprites) base.sprites = sprites as Record<string, { url: string }>;
+  if (resizedSprites) base.resizedSprites = resizedSprites as Record<string, { url: string }>;
   const ship = base;
   gameState.ships[entityId] = ship;
 
@@ -155,9 +227,52 @@ export async function handleStartWithPrompt(
             if (v?.url) merged[k] = { url: v.url };
           }
           ship.sprites = merged;
-          // Prefer canonical idle (thrusters off + muzzle off) variant if present
-          if (merged['thrustersOffMuzzleOff']?.url) {
-            ship.appearance.shipImageUrl = merged['thrustersOffMuzzleOff']!.url;
+          // Attempt to resize any new sprite urls
+          try {
+            const newUrls = Object.values(merged)
+              .map((v) => v.url)
+              .filter(
+                (u) =>
+                  u &&
+                  (!ship.resizedSprites ||
+                    !Object.values(ship.resizedSprites).some((rv) => rv && rv.url === u)),
+              );
+            if (newUrls.length) {
+              const resizeResp2 = await postJson(RESIZE_ENDPOINT, {
+                imageUrls: newUrls,
+                maxWidth: 128,
+                maxHeight: 128,
+              });
+              if (resizeResp2.ok && resizeResp2.json && typeof resizeResp2.json === 'object') {
+                const rr2 = resizeResp2.json as {
+                  items?: { sourceUrl?: string; resizedUrl?: string }[];
+                };
+                if (Array.isArray(rr2.items)) {
+                  ship.resizedSprites =
+                    ship.resizedSprites || ({} as Record<string, { url: string }>);
+                  const lookup = new Map<string, string>();
+                  for (const it of rr2.items) {
+                    if (it?.sourceUrl && it?.resizedUrl) lookup.set(it.sourceUrl, it.resizedUrl);
+                  }
+                  for (const [k, v] of Object.entries(merged)) {
+                    const rz = lookup.get(v.url);
+                    if (rz) ship.resizedSprites[k] = { url: rz };
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            console.warn('[startWithPrompt] resize expansion step failed', err);
+          }
+          // Prefer canonical idle resized variant (else the first resized)
+          if (ship.resizedSprites) {
+            const preferred =
+              ship.resizedSprites['thrustersOffMuzzleOff']?.url ||
+              ship.resizedSprites['thrustersOffMuzzleOn']?.url ||
+              ship.resizedSprites['thrustersOnMuzzleOff']?.url ||
+              ship.resizedSprites['thrustersOnMuzzleOn']?.url ||
+              Object.values(ship.resizedSprites)[0]?.url;
+            if (preferred) ship.appearance.shipImageUrl = preferred;
           }
           ship.lastUpdatedAt = Date.now();
           broadcast(wss, { type: 'gameState', payload: gameState });

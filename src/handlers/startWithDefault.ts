@@ -42,6 +42,8 @@ export function handleStartWithDefault(
   const ship: ShipState = {
     physics: { position: { x: 0, y: 0 }, rotation: 0 },
     sprites: { ...DEFAULT_SHIP_SPRITES },
+    // For default path we do not (yet) hit resize service; treat originals as resized for now.
+    resizedSprites: { ...DEFAULT_SHIP_SPRITES },
     appearance: { shipImageUrl: DEFAULT_SHIP_SPRITES.thrustersOffMuzzleOff.url },
     lastUpdatedAt: Date.now(),
   };

@@ -166,8 +166,9 @@ export function initGameLoop(wss: WebSocketServer): InternalLoopState {
     ship.physics.position.x += v.x * SIM_DT;
     ship.physics.position.y += v.y * SIM_DT;
 
-    // Dynamic sprite selection each sim tick (if sprites present)
-    if (ship.sprites) {
+    // Dynamic sprite selection each sim tick (prefer resizedSprites exclusively)
+    const activeSpriteSet = ship.resizedSprites || undefined;
+    if (activeSpriteSet) {
       // Muzzle flash active during configured duration after firing
       const now = Date.now();
       const muzzleActive =
@@ -185,7 +186,7 @@ export function initGameLoop(wss: WebSocketServer): InternalLoopState {
         for (const v of variantOrder) {
           if (v.thrust === thrust && v.muzzle === muzzle) {
             for (const key of v.keys) {
-              const found = (ship.sprites as Record<string, { url: string } | undefined>)[key];
+              const found = (activeSpriteSet as Record<string, { url: string } | undefined>)[key];
               if (found?.url) return found;
             }
           }
@@ -200,7 +201,7 @@ export function initGameLoop(wss: WebSocketServer): InternalLoopState {
       // Final fallback: any non-muzzle, non-thrust specific baseline
       if (!variant) variant = resolveVariant(false, false) || resolveVariant(true, false);
 
-      if (variant && variant.url && ship.appearance.shipImageUrl !== variant.url) {
+      if (variant?.url && ship.appearance.shipImageUrl !== variant.url) {
         ship.appearance.shipImageUrl = variant.url;
       }
     }
