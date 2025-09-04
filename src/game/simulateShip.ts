@@ -24,9 +24,10 @@ export function simulateShip(
   // (Time-based muzzle flash handled via muzzleFlashUntil timestamp)
 
   // --- Input interpretation ---
-  let thrustInput = 0; // -1..1
+  let thrustInput = 0; // 0..1 forward thrust only
+  let braking = false; // user holding S to actively slow down
   if (keysDown.has('W')) thrustInput = 1;
-  if (keysDown.has('S')) thrustInput = -1; // simple reverse
+  if (keysDown.has('S')) braking = true; // new braking behavior instead of reverse thrust
   let rotateInput = 0; // -1 left, +1 right
   if (keysDown.has('A')) rotateInput -= 1;
   if (keysDown.has('D')) rotateInput += 1;
@@ -69,15 +70,33 @@ export function simulateShip(
   const v = ship.physics.velocity;
 
   const thrustActive = thrustInput !== 0;
-  // Apply thrust
+  // Apply thrust (forward only)
   if (thrustActive) {
     const angle = ship.physics.rotation - Math.PI / 2; // align with previous logic
     const forwardX = Math.cos(angle);
     const forwardY = Math.sin(angle);
     v.x += forwardX * THRUST_ACCEL * thrustInput * SIM_DT;
     v.y += forwardY * THRUST_ACCEL * thrustInput * SIM_DT;
-  } else {
-    // Damping when coasting (frame-rate independent-ish)
+  }
+
+  // Braking (S key): apply an opposing acceleration proportional to current velocity.
+  // This feels like holding space brakes in Asteroids: stronger than passive damping
+  if (braking) {
+    const speed = Math.hypot(v.x, v.y);
+    if (speed > 0.0001) {
+      // Choose a brake accel somewhat larger than natural damping equivalent.
+      // Reuse THRUST_ACCEL so stopping time is comparable to accelerating time.
+      const brakeAccel = THRUST_ACCEL * 1.2; // slight boost for snappier stop
+      const decel = brakeAccel * SIM_DT;
+      const newSpeed = speed - decel;
+      const scale = Math.max(newSpeed, 0) / speed;
+      v.x *= scale;
+      v.y *= scale;
+    }
+  }
+
+  // Passive damping only when not thrusting and not actively braking (braking already reduces speed)
+  if (!thrustActive && !braking) {
     const dampFactor = 1 - (1 - LINEAR_DAMPING) * SIM_DT;
     v.x *= dampFactor;
     v.y *= dampFactor;

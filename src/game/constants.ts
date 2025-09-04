@@ -1,6 +1,6 @@
 // Game simulation constants
 export const THRUST_ACCEL = 180; // units / s^2 when full forward
-export const MAX_SPEED = 260; // hard clamp so analog & keyboard equal
+export const MAX_SPEED = 520; // doubled (was 260) - hard clamp so analog & keyboard equal
 export const ROTATE_SPEED = Math.PI; // rad / s at full rotate input
 export const LINEAR_DAMPING = 0.9; // approx damping factor when coasting
 export const STICK_DEADZONE = 0.15; // radial deadzone for analog stick
