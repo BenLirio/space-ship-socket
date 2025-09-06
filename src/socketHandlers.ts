@@ -10,7 +10,6 @@ import { handleInputSnapshot } from './handlers/inputSnapshot.js';
 import type { CustomWebSocket } from './types/socket.js';
 import { randomUUID } from 'crypto';
 import { initGameLoop } from './game/loop.js';
-import { sendLatestScoreboardTo } from './scoreboard.js';
 
 // Game loop moved to gameLoop.ts
 
@@ -44,8 +43,6 @@ export function attachSocketHandlers(wss: WebSocketServer) {
     console.log(`New client connected: ${socket.id}`);
     sendJson(socket, { type: 'info', payload: 'connected to server' });
     sendJson(socket, { type: 'connected', payload: { id: socket.id } });
-    // Send initial scoreboard snapshot (best effort)
-    void sendLatestScoreboardTo(socket);
 
     socket.on('message', (data: RawData) => {
       const text = data.toString();

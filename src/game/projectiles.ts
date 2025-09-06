@@ -6,7 +6,6 @@ import {
   BULLET_DAMAGE,
 } from './constants.js';
 import type { InternalLoopState } from './types.js';
-import { updateAndBroadcastScore } from '../scoreboard.js';
 
 export function spawnProjectile(loop: InternalLoopState, ship: ShipState) {
   // Supports variable number of gun origins derived from diff bounding boxes between muzzle on/off sprites.
@@ -111,12 +110,7 @@ export function simulateProjectiles(loop: InternalLoopState, dt: number) {
           // Credit a kill to the owner if this hit destroyed the ship
           if (prev > 0 && ship.health === 0) {
             const killer = loop.gameState.ships[p.ownerId];
-            if (killer) {
-              killer.kills = (killer.kills ?? 0) + 1;
-              // Update external scoreboard and broadcast latest list
-              // Fire and forget; no await inside sim loop
-              void updateAndBroadcastScore(loop, loop.wss, p.ownerId);
-            }
+            if (killer) killer.kills = (killer.kills ?? 0) + 1;
           }
           hit = true;
           break; // bullet consumed
