@@ -1,7 +1,7 @@
 // Game simulation constants
 export const THRUST_ACCEL = 180; // units / s^2 when full forward
 export const MAX_SPEED = 520; // doubled (was 260) - hard clamp so analog & keyboard equal
-export const ROTATE_SPEED = Math.PI; // rad / s at full rotate input
+export const ROTATE_SPEED = Math.PI / 2; // rad / s at full rotate input (halved)
 export const LINEAR_DAMPING = 0.9; // approx damping factor when coasting
 export const STICK_DEADZONE = 0.15; // radial deadzone for analog stick
 export const MUZZLE_FLASH_DURATION_MS = Number(process.env.MUZZLE_FLASH_DURATION_MS) || 150; // visible window
@@ -18,3 +18,5 @@ export const SHIP_EXPIRY_MS = 5000; // inactivity purge threshold
 export const SHIP_HIT_RADIUS = 28;
 // Damage dealt by a single projectile on hit
 export const BULLET_DAMAGE = 10;
+// Spawn area half-extent in world units; ships spawn uniformly within [-SPAWN_RANGE, +SPAWN_RANGE]
+export const SPAWN_RANGE = 1000;

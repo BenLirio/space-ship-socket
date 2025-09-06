@@ -5,6 +5,7 @@ import { broadcast, sendJson } from '../socketUtils.js';
 import type { CustomWebSocket } from '../types/socket.js';
 import type { ShipState } from '../types/game.js';
 import { getGameState } from '../game/loop.js';
+import { SPAWN_RANGE } from '../game/constants.js';
 
 // Default full-size (original) sprite variants pulled from captured gameState sample
 // These are the "generated" originals (non-resized) for each state.
@@ -62,12 +63,17 @@ export function handleStartWithDefault(
   const targetId =
     body?.userId && typeof body.userId === 'string' ? body.userId : (socket as CustomWebSocket).id;
 
+  // Random spawn within a square region centered at origin, random initial rotation
+  const spawnX = (Math.random() * 2 - 1) * SPAWN_RANGE;
+  const spawnY = (Math.random() * 2 - 1) * SPAWN_RANGE;
+  const spawnRot = (Math.random() * 2 - 1) * Math.PI; // [-PI, PI]
+
   const ship: ShipState = {
-    physics: { position: { x: 0, y: 0 }, rotation: 0 },
+    physics: { position: { x: spawnX, y: spawnY }, rotation: spawnRot },
     sprites: { ...DEFAULT_FULL_SPRITES },
     resizedSprites: { ...DEFAULT_RESIZED_SPRITES },
-  health: 100,
-  kills: 0,
+    health: 100,
+    kills: 0,
     bulletOrigins: [...DEFAULT_BULLET_ORIGINS],
     appearance: { shipImageUrl: DEFAULT_RESIZED_SPRITES.thrustersOffMuzzleOff.url },
     lastUpdatedAt: Date.now(),

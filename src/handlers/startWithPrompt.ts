@@ -187,8 +187,12 @@ export async function handleStartWithPrompt(
 
   // At this point resizedSprites is guaranteed defined (fallback applied above)
   resizedSprites = resizedSprites || ({} as Record<string, { url: string }>);
+  const { SPAWN_RANGE } = await import('../game/constants.js');
+  const spawnX = (Math.random() * 2 - 1) * SPAWN_RANGE;
+  const spawnY = (Math.random() * 2 - 1) * SPAWN_RANGE;
+  const spawnRot = (Math.random() * 2 - 1) * Math.PI;
   const base: ShipState = {
-    physics: { position: { x: 0, y: 0 }, rotation: 0 },
+    physics: { position: { x: spawnX, y: spawnY }, rotation: spawnRot },
     health: 100,
     kills: 0,
     appearance: {
