@@ -68,8 +68,14 @@ export function handleStartWithDefault(
   const spawnY = (Math.random() * 2 - 1) * SPAWN_RANGE;
   const spawnRot = (Math.random() * 2 - 1) * Math.PI; // [-PI, PI]
 
+  // Random default name like "default 02032" (5 zero-padded digits)
+  const defaultName = `default ${Math.floor(Math.random() * 100000)
+    .toString()
+    .padStart(5, '0')}`;
+
   const ship: ShipState = {
     physics: { position: { x: spawnX, y: spawnY }, rotation: spawnRot },
+    name: defaultName,
     sprites: { ...DEFAULT_FULL_SPRITES },
     resizedSprites: { ...DEFAULT_RESIZED_SPRITES },
     health: 100,

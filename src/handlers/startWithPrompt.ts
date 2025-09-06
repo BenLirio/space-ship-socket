@@ -22,6 +22,9 @@ const DEV_DEFAULT_RESIZE_ENDPOINT = 'http://localhost:3000/resize';
 const PROD_DEFAULT_DIFF_BOUNDING_BOX_ENDPOINT =
   'https://9rc13jr0p2.execute-api.us-east-1.amazonaws.com/diff-bounding-box';
 const DEV_DEFAULT_DIFF_BOUNDING_BOX_ENDPOINT = 'http://localhost:3000/diff-bounding-box';
+const PROD_DEFAULT_NAME_SHIP_ENDPOINT =
+  'https://9rc13jr0p2.execute-api.us-east-1.amazonaws.com/name-ship';
+const DEV_DEFAULT_NAME_SHIP_ENDPOINT = 'http://localhost:3000/name-ship';
 const GENERATE_ENDPOINT =
   process.env.GENERATE_SHIP_URL ||
   (process.env.NODE_ENV === 'production'
@@ -42,6 +45,11 @@ const DIFF_BOUNDING_BOX_ENDPOINT =
   (process.env.NODE_ENV === 'production'
     ? PROD_DEFAULT_DIFF_BOUNDING_BOX_ENDPOINT
     : DEV_DEFAULT_DIFF_BOUNDING_BOX_ENDPOINT);
+const NAME_SHIP_ENDPOINT =
+  process.env.NAME_SHIP_URL ||
+  (process.env.NODE_ENV === 'production'
+    ? PROD_DEFAULT_NAME_SHIP_ENDPOINT
+    : DEV_DEFAULT_NAME_SHIP_ENDPOINT);
 
 interface StartWithPromptPayload {
   prompt?: unknown;
@@ -92,6 +100,19 @@ export async function handleStartWithPrompt(
   let imageUrl: string | undefined;
   let sprites: Record<string, { url?: string }> | undefined;
   let resizedSprites: Record<string, { url: string }> | undefined;
+  // Kick off name generation in parallel; we'll attach when ready.
+  const namePromise = (async () => {
+    try {
+      const resp = await postJson(NAME_SHIP_ENDPOINT, { prompt });
+      if (resp.ok && resp.json && typeof resp.json === 'object') {
+        const r = resp.json as { name?: unknown };
+        if (typeof r.name === 'string' && r.name.trim()) return r.name.trim();
+      }
+    } catch (e) {
+      console.warn('[startWithPrompt] name-ship call failed', e);
+    }
+    return undefined;
+  })();
   try {
     const resp = await postJson(GENERATE_ENDPOINT, { prompt });
     if (!resp.ok) {
@@ -214,6 +235,20 @@ export async function handleStartWithPrompt(
   // Initial broadcast (may only have 1 sprite variant at this point)
   broadcast(wss, { type: 'gameState', payload: gameState });
   sendJson(socket, { type: 'info', payload: 'ship base sprite generated' });
+
+  // Attach name when available without blocking gameplay
+  (async () => {
+    const name = await namePromise;
+    if (!name) return;
+    const shipRef = gameState.ships[entityId];
+    if (!shipRef) return; // ship might have been purged
+    shipRef.name = name;
+    shipRef.lastUpdatedAt = Date.now();
+    broadcast(wss, { type: 'gameState', payload: gameState });
+    sendJson(socket, { type: 'info', payload: `ship named: ${name}` });
+  })().catch(() => {
+    /* no-op */
+  });
 
   // Determine whether we need to expand to full sprite sheet (if we have < 4 url entries)
   const spriteUrlCount = sprites

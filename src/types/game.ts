@@ -21,6 +21,8 @@ export interface ShipState {
   sprites?: ShipSprites;
   // Resized sprite variants (always preferred by server & clients). Mirrors keys of `sprites`.
   resizedSprites?: ShipSprites;
+  /** Optional generated display name for the ship (from name-ship service) */
+  name?: string;
   /** Current hit points; new ships start at 100 */
   health: number;
   /** Number of enemy ships this ship has destroyed; starts at 0 */
