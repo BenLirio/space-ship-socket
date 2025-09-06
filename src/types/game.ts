@@ -23,6 +23,8 @@ export interface ShipState {
   resizedSprites?: ShipSprites;
   /** Current hit points; new ships start at 100 */
   health: number;
+  /** Number of enemy ships this ship has destroyed; starts at 0 */
+  kills: number;
   /** Local-space (image-centered) offsets where projectiles should originate.
    *  Computed after sprite-sheet expansion by diffing thrustersOnMuzzleOff vs thrustersOnMuzzleOn.
    *  Each origin is (x,y) in original (non-resized) image pixels relative to image center

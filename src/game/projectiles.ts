@@ -105,7 +105,13 @@ export function simulateProjectiles(loop: InternalLoopState, dt: number) {
         }
 
         if (intersects) {
-          ship.health = Math.max(0, (ship.health ?? 100) - BULLET_DAMAGE);
+          const prev = ship.health ?? 100;
+          ship.health = Math.max(0, prev - BULLET_DAMAGE);
+          // Credit a kill to the owner if this hit destroyed the ship
+          if (prev > 0 && ship.health === 0) {
+            const killer = loop.gameState.ships[p.ownerId];
+            if (killer) killer.kills = (killer.kills ?? 0) + 1;
+          }
           hit = true;
           break; // bullet consumed
         }

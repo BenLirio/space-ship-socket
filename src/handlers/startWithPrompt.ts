@@ -190,6 +190,7 @@ export async function handleStartWithPrompt(
   const base: ShipState = {
     physics: { position: { x: 0, y: 0 }, rotation: 0 },
     health: 100,
+    kills: 0,
     appearance: {
       shipImageUrl:
         resizedSprites['thrustersOffMuzzleOff']?.url ||
