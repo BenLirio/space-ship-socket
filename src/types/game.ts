@@ -17,12 +17,12 @@ export interface ShipSprites {
 
 export interface ShipState {
   physics: ShipPhysics;
-  // Optional sprite variants (present when generated via prompt endpoint)
-  sprites?: ShipSprites;
+  // Sprite variants (present when generated or defaulted)
+  sprites: ShipSprites;
   // Resized sprite variants (always preferred by server & clients). Mirrors keys of `sprites`.
-  resizedSprites?: ShipSprites;
-  /** Optional generated display name for the ship (from name-ship service) */
-  name?: string;
+  resizedSprites: ShipSprites;
+  /** Generated display name for the ship (from name-ship service or default fallback) */
+  name: string;
   /** Current hit points; new ships start at 100 */
   health: number;
   /** Number of enemy ships this ship has destroyed; starts at 0 */
@@ -32,7 +32,7 @@ export interface ShipState {
    *  Each origin is (x,y) in original (non-resized) image pixels relative to image center
    *  (i.e. image center = 0,0; +x right; +y down). When firing we rotate + translate into world space
    *  and also push slightly forward along the ship's forward vector. */
-  bulletOrigins?: Vector2[];
+  bulletOrigins: Vector2[];
   appearance: {
     shipImageUrl: string;
   };

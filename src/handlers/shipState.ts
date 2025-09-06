@@ -13,7 +13,9 @@ function isVector2(v: unknown): v is { x: number; y: number } {
 }
 
 // Validate only the client-provided subset (without server-managed fields like lastUpdatedAt/health/kills)
-function isShipState(p: unknown): p is Omit<ShipState, 'lastUpdatedAt' | 'health' | 'kills'> {
+type ClientShipPatch = Pick<ShipState, 'physics' | 'appearance'>;
+
+function isShipState(p: unknown): p is ClientShipPatch {
   const obj = p as Record<string, unknown>;
   if (!obj || typeof obj !== 'object') return false;
   const physics = obj.physics as Record<string, unknown> | undefined;
@@ -34,13 +36,24 @@ export function handleShipState(wss: WebSocketServer, socket: WebSocket, msg: In
   if (!gameState) return; // Defensive (loop not started)
   const entityId = (socket as CustomWebSocket).id;
   const existing = gameState.ships[entityId];
-  const enriched: ShipState = {
-    ...(payload as Omit<ShipState, 'lastUpdatedAt' | 'health' | 'kills'>),
-    health: existing?.health ?? 100,
-    kills: existing?.kills ?? 0,
+  if (!existing) {
+    // Ignore early client updates until server-created ship exists
+    return sendJson(socket, { type: 'info', payload: 'ship not ready yet; update ignored' });
+  }
+  const incoming = payload as ClientShipPatch;
+  // Merge only the mutable fields the client may change; preserve required completeness
+  const merged: ShipState = {
+    ...existing,
+    physics: incoming.physics ?? existing.physics,
+    appearance: incoming.appearance ?? existing.appearance,
+    sprites: existing.sprites,
+    resizedSprites: existing.resizedSprites,
+    name: existing.name,
+    bulletOrigins: existing.bulletOrigins,
+    health: existing.health,
+    kills: existing.kills,
     lastUpdatedAt: Date.now(),
   };
-  gameState.ships[entityId] = enriched;
-  // Immediately broadcast updated snapshot (could be throttled if needed)
+  gameState.ships[entityId] = merged;
   broadcast(wss, { type: 'gameState', payload: gameState });
 }

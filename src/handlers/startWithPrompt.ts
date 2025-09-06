@@ -98,7 +98,7 @@ export async function handleStartWithPrompt(
   }
 
   const entityId = (socket as CustomWebSocket).id;
-  sendJson(socket, { type: 'info', payload: 'generating ship...' });
+  sendJson(socket, { type: 'info', payload: 'generating base ship image…' });
   let imageUrl: string | undefined;
   let sprites: Record<string, { url?: string }> | undefined;
   let resizedSprites: Record<string, { url: string }> | undefined;
@@ -159,6 +159,7 @@ export async function handleStartWithPrompt(
             .map((s) => s.url)
             .filter((u): u is string => typeof u === 'string' && !!u)
         : [imageUrl];
+      sendJson(socket, { type: 'info', payload: 'resizing base sprite(s)…' });
       const resizeResp = await postJson(RESIZE_ENDPOINT, {
         imageUrls,
         maxWidth: 128,
@@ -207,80 +208,43 @@ export async function handleStartWithPrompt(
     return sendJson(socket, { type: 'error', payload: 'internal generation error' });
   }
 
-  // At this point resizedSprites is guaranteed defined (fallback applied above)
-  resizedSprites = resizedSprites || ({} as Record<string, { url: string }>);
-  const spawn = randomSpawn();
-  const base: ShipState = {
-    physics: { position: { x: spawn.x, y: spawn.y }, rotation: spawn.rotation },
-    health: 100,
-    kills: 0,
-    appearance: {
-      shipImageUrl: preferredSpriteUrl(resizedSprites) || imageUrl!,
-    },
-    lastUpdatedAt: Date.now(),
-  };
-  if (sprites) base.sprites = sprites as Record<string, { url: string }>;
-  if (resizedSprites) base.resizedSprites = resizedSprites as Record<string, { url: string }>;
-  const ship = base;
-  gameState.ships[entityId] = ship;
-
-  // Initial broadcast (may only have 1 sprite variant at this point)
-  broadcast(wss, { type: 'gameState', payload: gameState });
-  sendJson(socket, { type: 'info', payload: 'ship base sprite generated' });
-
-  // Attach name when available without blocking gameplay
-  (async () => {
-    const name = await namePromise;
-    if (!name) return;
-    const shipRef = gameState.ships[entityId];
-    if (!shipRef) return; // ship might have been purged
-    shipRef.name = name;
-    shipRef.lastUpdatedAt = Date.now();
-    broadcast(wss, { type: 'gameState', payload: gameState });
-    sendJson(socket, { type: 'info', payload: `ship named: ${name}` });
-  })().catch(() => {
-    /* no-op */
-  });
-
   // Expand to full sprite sheet if we currently have fewer than 4 variants
   const spriteUrlCount = sprites
     ? Object.values(sprites).filter((v) => v && typeof v.url === 'string' && v.url).length
     : 0;
   const primaryImageUrl = imageUrl; // for second call
   if (primaryImageUrl && spriteUrlCount < 4) {
-    // Fire & forget asynchronous expansion
-    (async () => {
-      try {
-        sendJson(socket, { type: 'info', payload: 'expanding ship sprites...' });
-        const expandResp = await postJson(GENERATE_SPRITE_SHEET_ENDPOINT, {
-          imageUrl: primaryImageUrl,
-        });
-        if (!expandResp.ok) {
-          console.warn('[startWithPrompt] sprite sheet expansion failed', expandResp.status);
-          return; // silent failure (base ship still usable)
-        }
+    try {
+      sendJson(socket, { type: 'info', payload: 'expanding ship sprites…' });
+      const expandResp = await postJson(GENERATE_SPRITE_SHEET_ENDPOINT, {
+        imageUrl: primaryImageUrl,
+      });
+      if (!expandResp.ok) {
+        console.warn('[startWithPrompt] sprite sheet expansion failed', expandResp.status);
+      } else {
         const expandData = expandResp.json as GenerateResponseOk | undefined;
         if (expandData?.sprites) {
-          const merged: Record<string, { url: string }> = {
-            ...(ship.sprites || {}),
-          } as Record<string, { url: string }>;
-          for (const [k, v] of Object.entries(expandData.sprites)) {
-            if (v?.url) merged[k] = { url: v.url };
+          const base: Record<string, { url: string }> = {};
+          if (sprites) {
+            for (const [k, v] of Object.entries(sprites)) if (v?.url) base[k] = { url: v.url };
           }
-          ship.sprites = merged;
-          // Attempt to resize any new sprite urls
+          for (const [k, v] of Object.entries(expandData.sprites)) {
+            if (v?.url) base[k] = { url: v.url };
+          }
+          sprites = base;
+          // Resize any urls not already resized
           try {
-            const newUrls = Object.values(merged)
+            const toResize = Object.values(base)
               .map((v) => v.url)
               .filter(
                 (u) =>
                   u &&
-                  (!ship.resizedSprites ||
-                    !Object.values(ship.resizedSprites).some((rv) => rv && rv.url === u)),
+                  (!resizedSprites || !Object.values(resizedSprites).some((rv) => rv.url === u)),
               );
-            if (newUrls.length) {
+            if (toResize.length) {
+              sendJson(socket, { type: 'info', payload: 'resizing expanded sprites…' });
               const resizeResp2 = await postJson(RESIZE_ENDPOINT, {
-                imageUrls: newUrls,
+                imageUrls: toResize,
                 maxWidth: 128,
                 maxHeight: 128,
               });
@@ -289,15 +253,14 @@ export async function handleStartWithPrompt(
                   items?: { sourceUrl?: string; resizedUrl?: string }[];
                 };
                 if (Array.isArray(rr2.items)) {
-                  ship.resizedSprites =
-                    ship.resizedSprites || ({} as Record<string, { url: string }>);
+                  resizedSprites = resizedSprites || ({} as Record<string, { url: string }>);
                   const lookup = new Map<string, string>();
                   for (const it of rr2.items) {
                     if (it?.sourceUrl && it?.resizedUrl) lookup.set(it.sourceUrl, it.resizedUrl);
                   }
-                  for (const [k, v] of Object.entries(merged)) {
+                  for (const [k, v] of Object.entries(base)) {
                     const rz = lookup.get(v.url);
-                    if (rz) ship.resizedSprites[k] = { url: rz };
+                    if (rz) resizedSprites[k] = { url: rz };
                   }
                 }
               }
@@ -305,83 +268,129 @@ export async function handleStartWithPrompt(
           } catch (err) {
             console.warn('[startWithPrompt] resize expansion step failed', err);
           }
-          // Prefer canonical idle resized variant (else the first resized)
-          if (ship.resizedSprites) {
-            const preferred =
-              ship.resizedSprites['thrustersOffMuzzleOff']?.url ||
-              ship.resizedSprites['thrustersOffMuzzleOn']?.url ||
-              ship.resizedSprites['thrustersOnMuzzleOff']?.url ||
-              ship.resizedSprites['thrustersOnMuzzleOn']?.url ||
-              Object.values(ship.resizedSprites)[0]?.url;
-            if (preferred) ship.appearance.shipImageUrl = preferred;
-          }
-          ship.lastUpdatedAt = Date.now();
-          broadcast(wss, { type: 'gameState', payload: gameState });
-          sendJson(socket, { type: 'info', payload: 'ship sprites expanded' });
-
-          // Attempt to compute bullet origins by diffing thrustersOnMuzzleOff vs thrustersOnMuzzleOn (FULL size, not resized)
-          try {
-            const muzzleOffUrl = ship.sprites?.['thrustersOnMuzzleOff']?.url;
-            const muzzleOnUrl = ship.sprites?.['thrustersOnMuzzleOn']?.url;
-            if (muzzleOffUrl && muzzleOnUrl) {
-              const diffResp = await postJson(DIFF_BOUNDING_BOX_ENDPOINT, {
-                imageUrlA: muzzleOffUrl,
-                imageUrlB: muzzleOnUrl,
-                // Tuned parameters: tighter threshold & large box/pixel minimum to isolate muzzle flashes
-                threshold: 0.03,
-                minBoxArea: 500,
-                minClusterPixels: 500,
-              });
-              if (diffResp.ok && diffResp.json && typeof diffResp.json === 'object') {
-                const diffJson = diffResp.json as {
-                  boxes?: { x: number; y: number; width: number; height: number }[];
-                  imageWidth?: number;
-                  imageHeight?: number;
-                };
-                if (
-                  Array.isArray(diffJson.boxes) &&
-                  typeof diffJson.imageWidth === 'number' &&
-                  typeof diffJson.imageHeight === 'number'
-                ) {
-                  const fullW = diffJson.imageWidth;
-                  const fullH = diffJson.imageHeight;
-                  const cx = fullW / 2;
-                  const cy = fullH / 2;
-                  // Target displayed size (matches resize service request max 128). If actual resized differs
-                  // (non-square), we could optionally look it up; for now assume square scaling w.r.t original.
-                  const TARGET_SIZE = 128; // matches resize request maxWidth/maxHeight
-                  const scaleX = TARGET_SIZE / fullW;
-                  const scaleY = TARGET_SIZE / fullH;
-                  // Compute ORIGINS using geometric CENTER of each bounding box, then apply a fixed
-                  // downward ( +y ) offset so bullets originate slightly behind the brightest part of
-                  // the muzzle flash (closer to the barrel). Tunable constant below.
-                  const CENTER_Y_EXTRA = 20; // pixels in resized 128x128 local space (was 15; +10px per request)
-                  const scaledOrigins = diffJson.boxes.map((b) => {
-                    const centerOx = b.x + b.width / 2 - cx;
-                    const centerOy = b.y + b.height / 2 - cy; // +y down
-                    const scaledX = centerOx * scaleX;
-                    const scaledY = centerOy * scaleY + CENTER_Y_EXTRA; // push downward
-                    return { x: scaledX, y: scaledY };
-                  });
-                  if (scaledOrigins.length) {
-                    ship.bulletOrigins = scaledOrigins;
-                    ship.lastUpdatedAt = Date.now();
-                    broadcast(wss, { type: 'gameState', payload: gameState });
-                    sendJson(socket, {
-                      type: 'info',
-                      payload: `computed ${scaledOrigins.length} bullet origin(s)`,
-                    });
-                  }
-                }
-              }
-            }
-          } catch (err) {
-            console.warn('[startWithPrompt] diff-bounding-box step failed', err);
-          }
+          sendJson(socket, { type: 'info', payload: 'sprite sheet ready' });
         }
-      } catch (err) {
-        console.error('[startWithPrompt] sprite sheet expansion error', err);
       }
-    })();
+    } catch (err) {
+      console.error('[startWithPrompt] sprite sheet expansion error', err);
+    }
   }
+
+  // Ensure we have concrete structures after possible fallbacks
+  resizedSprites = resizedSprites || ({} as Record<string, { url: string }>);
+  if (!sprites) {
+    // Build sprites record from whatever we resized
+    const s: Record<string, { url: string }> = {};
+    for (const [k, v] of Object.entries(resizedSprites)) s[k] = { url: v.url };
+    sprites = s;
+  }
+
+  // Compute bullet origins by diffing thrustersOnMuzzleOff vs thrustersOnMuzzleOn
+  sendJson(socket, { type: 'info', payload: 'computing bullet origins…' });
+  let bulletOrigins: { x: number; y: number }[] = [];
+  try {
+    const muzzleOffUrl = sprites?.['thrustersOnMuzzleOff']?.url;
+    const muzzleOnUrl = sprites?.['thrustersOnMuzzleOn']?.url;
+    if (muzzleOffUrl && muzzleOnUrl) {
+      const diffResp = await postJson(DIFF_BOUNDING_BOX_ENDPOINT, {
+        imageUrlA: muzzleOffUrl,
+        imageUrlB: muzzleOnUrl,
+        threshold: 0.03,
+        minBoxArea: 500,
+        minClusterPixels: 500,
+      });
+      if (diffResp.ok && diffResp.json && typeof diffResp.json === 'object') {
+        const diffJson = diffResp.json as {
+          boxes?: { x: number; y: number; width: number; height: number }[];
+          imageWidth?: number;
+          imageHeight?: number;
+        };
+        if (
+          Array.isArray(diffJson.boxes) &&
+          typeof diffJson.imageWidth === 'number' &&
+          typeof diffJson.imageHeight === 'number'
+        ) {
+          const fullW = diffJson.imageWidth;
+          const fullH = diffJson.imageHeight;
+          const cx = fullW / 2;
+          const cy = fullH / 2;
+          const TARGET_SIZE = 128;
+          const scaleX = TARGET_SIZE / fullW;
+          const scaleY = TARGET_SIZE / fullH;
+          const CENTER_Y_EXTRA = 20;
+          bulletOrigins = diffJson.boxes.map((b) => {
+            const centerOx = b.x + b.width / 2 - cx;
+            const centerOy = b.y + b.height / 2 - cy; // +y down
+            const scaledX = centerOx * scaleX;
+            const scaledY = centerOy * scaleY + CENTER_Y_EXTRA; // push downward
+            return { x: scaledX, y: scaledY };
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[startWithPrompt] diff-bounding-box step failed', err);
+  }
+
+  if (!bulletOrigins.length) {
+    // Fallback twin guns
+    bulletOrigins = [
+      { x: -10, y: -30 },
+      { x: 10, y: -30 },
+    ];
+    sendJson(socket, {
+      type: 'info',
+      payload: 'bullet origins fallback applied',
+    });
+  } else {
+    sendJson(socket, {
+      type: 'info',
+      payload: `computed ${bulletOrigins.length} bullet origin(s)`,
+    });
+  }
+
+  // Name resolution (await with fallback)
+  sendJson(socket, { type: 'info', payload: 'generating ship name…' });
+  let name = await namePromise;
+  if (!name) {
+    name = `ship ${Math.floor(Math.random() * 100000)
+      .toString()
+      .padStart(5, '0')}`;
+    sendJson(socket, { type: 'info', payload: `name service unavailable, using: ${name}` });
+  } else {
+    sendJson(socket, { type: 'info', payload: `ship named: ${name}` });
+  }
+
+  // Final readiness checks
+  const preferredUrl = preferredSpriteUrl(resizedSprites) || imageUrl;
+  if (
+    !preferredUrl ||
+    !sprites ||
+    !Object.keys(sprites).length ||
+    !resizedSprites ||
+    !Object.keys(resizedSprites).length
+  ) {
+    return sendJson(socket, {
+      type: 'error',
+      payload: 'failed to prepare complete ship assets',
+    });
+  }
+
+  // Construct the full ShipState and broadcast once
+  const spawn = randomSpawn();
+  const ship: ShipState = {
+    physics: { position: { x: spawn.x, y: spawn.y }, rotation: spawn.rotation },
+    name,
+    sprites: sprites as Record<string, { url: string }>,
+    resizedSprites: resizedSprites as Record<string, { url: string }>,
+    health: 100,
+    kills: 0,
+    bulletOrigins,
+    appearance: { shipImageUrl: preferredUrl },
+    lastUpdatedAt: Date.now(),
+  };
+
+  gameState.ships[entityId] = ship;
+  broadcast(wss, { type: 'gameState', payload: gameState });
+  sendJson(socket, { type: 'info', payload: 'ship ready' });
 }
