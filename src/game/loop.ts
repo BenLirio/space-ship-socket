@@ -23,14 +23,22 @@ export function recordInput(
   const now = Date.now();
   let existing = loop.inputs[entityId];
   if (!existing) existing = loop.inputs[entityId] = { keysDown: new Set(), lastInputAt: now };
-  if (partial.keysDown) {
-    const arr = Array.from(partial.keysDown).filter((k): k is string => typeof k === 'string');
-    existing.keysDown = new Set(arr);
-  }
-  if (partial.joystick && typeof partial.joystick === 'object') {
-    const jx = typeof partial.joystick.x === 'number' ? partial.joystick.x : 0;
-    const jy = typeof partial.joystick.y === 'number' ? partial.joystick.y : 0;
-    existing.joystick = { x: jx, y: jy };
+  const ship = loop.gameState.ships[entityId];
+  const dead = !!ship && ship.health <= 0;
+  if (dead) {
+    // Do not register any input when ship is destroyed
+    existing.keysDown = new Set();
+    existing.joystick = { x: 0, y: 0 };
+  } else {
+    if (partial.keysDown) {
+      const arr = Array.from(partial.keysDown).filter((k): k is string => typeof k === 'string');
+      existing.keysDown = new Set(arr);
+    }
+    if (partial.joystick && typeof partial.joystick === 'object') {
+      const jx = typeof partial.joystick.x === 'number' ? partial.joystick.x : 0;
+      const jy = typeof partial.joystick.y === 'number' ? partial.joystick.y : 0;
+      existing.joystick = { x: jx, y: jy };
+    }
   }
   existing.lastInputAt = now;
 }

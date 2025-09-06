@@ -189,6 +189,7 @@ export async function handleStartWithPrompt(
   resizedSprites = resizedSprites || ({} as Record<string, { url: string }>);
   const base: ShipState = {
     physics: { position: { x: 0, y: 0 }, rotation: 0 },
+    health: 100,
     appearance: {
       shipImageUrl:
         resizedSprites['thrustersOffMuzzleOff']?.url ||

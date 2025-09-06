@@ -66,6 +66,7 @@ export function handleStartWithDefault(
     physics: { position: { x: 0, y: 0 }, rotation: 0 },
     sprites: { ...DEFAULT_FULL_SPRITES },
     resizedSprites: { ...DEFAULT_RESIZED_SPRITES },
+    health: 100,
     bulletOrigins: [...DEFAULT_BULLET_ORIGINS],
     appearance: { shipImageUrl: DEFAULT_RESIZED_SPRITES.thrustersOffMuzzleOff.url },
     lastUpdatedAt: Date.now(),

@@ -14,3 +14,7 @@ export const SIM_DT = 1 / SIM_HZ; // fixed-step dt seconds
 export const BROADCAST_HZ = 30;
 export const BROADCAST_MS = 1000 / BROADCAST_HZ;
 export const SHIP_EXPIRY_MS = 5000; // inactivity purge threshold
+// Approximate ship collision radius in world units (tuned for 128x128 resized sprite)
+export const SHIP_HIT_RADIUS = 28;
+// Damage dealt by a single projectile on hit
+export const BULLET_DAMAGE = 10;

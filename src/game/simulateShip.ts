@@ -17,9 +17,10 @@ export function simulateShip(
   ship: ShipState,
   input: InputState | undefined,
 ) {
+  const dead = ship.health <= 0;
   // Provide defaults when no input yet
-  const keysDown = input?.keysDown ?? new Set<string>();
-  const joystick = input?.joystick;
+  const keysDown = dead ? new Set<string>() : (input?.keysDown ?? new Set<string>());
+  const joystick = dead ? undefined : input?.joystick;
 
   // (Time-based muzzle flash handled via muzzleFlashUntil timestamp)
 
@@ -151,7 +152,7 @@ export function simulateShip(
   }
 
   // Firing logic
-  if (input && input.keysDown.has('SPACE')) {
+  if (!dead && input && keysDown.has('SPACE')) {
     const now = Date.now();
     if (!input.lastFireAt || now - input.lastFireAt >= FIRE_COOLDOWN_MS) {
       input.lastFireAt = now;
