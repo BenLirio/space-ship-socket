@@ -9,5 +9,3 @@ export interface IncomingMessage {
   body?: unknown;
   [k: string]: unknown; // Allow arbitrary extra fields for extensibility
 }
-
-export type PingMessage = IncomingMessage & { type: 'ping' };

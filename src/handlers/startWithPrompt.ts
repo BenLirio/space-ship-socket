@@ -5,6 +5,8 @@ import { broadcast, sendJson } from '../socketUtils.js';
 import type { CustomWebSocket } from '../types/socket.js';
 import type { ShipState } from '../types/game.js';
 import { getGameState } from '../game/loop.js';
+import { preferredSpriteUrl } from '../game/sprites.js';
+import { randomSpawn } from '../game/spawn.js';
 
 // Generation endpoint resolution order:
 // 1. Explicit env GENERATE_SHIP_URL / GENERATE_SPRITE_SHEET_URL
@@ -56,7 +58,7 @@ interface StartWithPromptPayload {
 }
 
 interface GenerateResponseOk {
-  imageUrl?: string; // legacy single image URL
+  imageUrl?: string; // single image URL (older API format)
   sprites?: Record<string, { url?: string } | undefined>; // new multi-state response fields (may be partial)
   [k: string]: unknown;
 }
@@ -190,8 +192,7 @@ export async function handleStartWithPrompt(
       console.warn('[startWithPrompt] resize step failed', err);
     }
 
-    // If resize failed produce a synthetic resizedSprites mapping pointing at originals so downstream logic
-    // (which always reads resizedSprites) still functions and never falls back to full-size lookup logic.
+    // If resize failed, fall back to original URLs so downstream logic can rely on resizedSprites existing.
     if (!resizedSprites) {
       if (sprites) {
         const rs: Record<string, { url: string }> = {};
@@ -208,22 +209,13 @@ export async function handleStartWithPrompt(
 
   // At this point resizedSprites is guaranteed defined (fallback applied above)
   resizedSprites = resizedSprites || ({} as Record<string, { url: string }>);
-  const { SPAWN_RANGE } = await import('../game/constants.js');
-  const spawnX = (Math.random() * 2 - 1) * SPAWN_RANGE;
-  const spawnY = (Math.random() * 2 - 1) * SPAWN_RANGE;
-  const spawnRot = (Math.random() * 2 - 1) * Math.PI;
+  const spawn = randomSpawn();
   const base: ShipState = {
-    physics: { position: { x: spawnX, y: spawnY }, rotation: spawnRot },
+    physics: { position: { x: spawn.x, y: spawn.y }, rotation: spawn.rotation },
     health: 100,
     kills: 0,
     appearance: {
-      shipImageUrl:
-        resizedSprites['thrustersOffMuzzleOff']?.url ||
-        resizedSprites['thrustersOffMuzzleOn']?.url ||
-        resizedSprites['thrustersOnMuzzleOff']?.url ||
-        resizedSprites['thrustersOnMuzzleOn']?.url ||
-        Object.values(resizedSprites)[0]?.url ||
-        imageUrl,
+      shipImageUrl: preferredSpriteUrl(resizedSprites) || imageUrl!,
     },
     lastUpdatedAt: Date.now(),
   };
@@ -250,7 +242,7 @@ export async function handleStartWithPrompt(
     /* no-op */
   });
 
-  // Determine whether we need to expand to full sprite sheet (if we have < 4 url entries)
+  // Expand to full sprite sheet if we currently have fewer than 4 variants
   const spriteUrlCount = sprites
     ? Object.values(sprites).filter((v) => v && typeof v.url === 'string' && v.url).length
     : 0;

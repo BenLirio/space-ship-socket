@@ -11,8 +11,6 @@ import type { CustomWebSocket } from './types/socket.js';
 import { randomUUID } from 'crypto';
 import { initGameLoop } from './game/loop.js';
 
-// Game loop moved to gameLoop.ts
-
 // Concrete handler overload resolution via narrow mapping then widened when accessed dynamically
 const specificHandlers = {
   ping: handlePing,
@@ -75,11 +73,7 @@ export function attachSocketHandlers(wss: WebSocketServer) {
     });
 
     socket.on('close', () => {
-      /* no-op (client count broadcast removed) */
+      // no-op for now
     });
-  });
-
-  wss.on('error', (err) => {
-    console.error('WebSocket server error', err);
   });
 }
