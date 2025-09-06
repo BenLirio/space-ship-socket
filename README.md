@@ -163,5 +163,3 @@ Behavior:
 Environment override: set `DIFF_BOUNDING_BOX_URL` to point at a compatible endpoint (defaults follow the same prod/dev pattern as other generation services).
 
 Client Impact: `bulletOrigins` (if present) can be used for local muzzle flash effects or predictive UI. They are not required for compatibility; absence means server used fallback pattern.
-
-.
