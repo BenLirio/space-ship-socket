@@ -3,7 +3,6 @@ import type { RawData, WebSocketServer } from 'ws';
 import type { IncomingMessage } from './types/messages.js';
 import { sendJson } from './socketUtils.js';
 import { handlePing } from './handlers/ping.js';
-import { handleShipState } from './handlers/shipState.js';
 import { handleStartWithDefault } from './handlers/startWithDefault.js';
 import { handleStartWithPrompt } from './handlers/startWithPrompt.js';
 import { handleInputSnapshot } from './handlers/inputSnapshot.js';
@@ -14,7 +13,6 @@ import { initGameLoop } from './game/loop.js';
 // Concrete handler overload resolution via narrow mapping then widened when accessed dynamically
 const specificHandlers = {
   ping: handlePing,
-  shipState: handleShipState,
   startWithDefault: handleStartWithDefault,
   startWithPrompt: handleStartWithPrompt,
   inputSnapshot: handleInputSnapshot,

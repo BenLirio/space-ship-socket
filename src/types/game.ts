@@ -35,7 +35,7 @@ export interface ShipState {
   appearance: {
     shipImageUrl: string;
   };
-  /** Epoch ms updated by server whenever a shipState message is received */
+  /** Epoch ms updated by server whenever a client update or simulation tick modifies the ship */
   lastUpdatedAt: number;
 }
 
