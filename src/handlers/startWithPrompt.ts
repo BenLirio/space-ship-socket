@@ -4,85 +4,25 @@ import type { IncomingMessage } from '../types/messages.js';
 import { broadcast, sendJson } from '../socketUtils.js';
 import type { CustomWebSocket } from '../types/socket.js';
 import type { ShipState, ShipSprites } from '../types/game.js';
-
-type PartialSprites = Partial<Record<keyof ShipSprites, { url: string }>>;
 import { getGameState } from '../game/loop.js';
 import { preferredSpriteUrl } from '../game/sprites.js';
 import { randomSpawn } from '../game/spawn.js';
-
-// Generation endpoint resolution order:
-// 1. Explicit env GENERATE_SHIP_URL / GENERATE_SPRITE_SHEET_URL
-// 2. Production default (API Gateway URL)
-// 3. Dev/local default (localhost)
-const PROD_DEFAULT_GENERATE_ENDPOINT =
-  'https://9rc13jr0p2.execute-api.us-east-1.amazonaws.com/generate-space-ship';
-const DEV_DEFAULT_GENERATE_ENDPOINT = 'http://localhost:3000/generate-space-ship';
-const PROD_DEFAULT_GENERATE_SPRITE_SHEET_ENDPOINT =
-  'https://9rc13jr0p2.execute-api.us-east-1.amazonaws.com/generate-sprite-sheet';
-const DEV_DEFAULT_GENERATE_SPRITE_SHEET_ENDPOINT = 'http://localhost:3000/generate-sprite-sheet';
-const PROD_DEFAULT_RESIZE_ENDPOINT =
-  'https://9rc13jr0p2.execute-api.us-east-1.amazonaws.com/resize';
-const DEV_DEFAULT_RESIZE_ENDPOINT = 'http://localhost:3000/resize';
-const PROD_DEFAULT_DIFF_BOUNDING_BOX_ENDPOINT =
-  'https://9rc13jr0p2.execute-api.us-east-1.amazonaws.com/diff-bounding-box';
-const DEV_DEFAULT_DIFF_BOUNDING_BOX_ENDPOINT = 'http://localhost:3000/diff-bounding-box';
-const PROD_DEFAULT_NAME_SHIP_ENDPOINT =
-  'https://9rc13jr0p2.execute-api.us-east-1.amazonaws.com/name-ship';
-const DEV_DEFAULT_NAME_SHIP_ENDPOINT = 'http://localhost:3000/name-ship';
-const GENERATE_ENDPOINT =
-  process.env.GENERATE_SHIP_URL ||
-  (process.env.NODE_ENV === 'production'
-    ? PROD_DEFAULT_GENERATE_ENDPOINT
-    : DEV_DEFAULT_GENERATE_ENDPOINT);
-const GENERATE_SPRITE_SHEET_ENDPOINT =
-  process.env.GENERATE_SPRITE_SHEET_URL ||
-  (process.env.NODE_ENV === 'production'
-    ? PROD_DEFAULT_GENERATE_SPRITE_SHEET_ENDPOINT
-    : DEV_DEFAULT_GENERATE_SPRITE_SHEET_ENDPOINT);
-const RESIZE_ENDPOINT =
-  process.env.RESIZE_SPRITES_URL ||
-  (process.env.NODE_ENV === 'production'
-    ? PROD_DEFAULT_RESIZE_ENDPOINT
-    : DEV_DEFAULT_RESIZE_ENDPOINT);
-const DIFF_BOUNDING_BOX_ENDPOINT =
-  process.env.DIFF_BOUNDING_BOX_URL ||
-  (process.env.NODE_ENV === 'production'
-    ? PROD_DEFAULT_DIFF_BOUNDING_BOX_ENDPOINT
-    : DEV_DEFAULT_DIFF_BOUNDING_BOX_ENDPOINT);
-const NAME_SHIP_ENDPOINT =
-  process.env.NAME_SHIP_URL ||
-  (process.env.NODE_ENV === 'production'
-    ? PROD_DEFAULT_NAME_SHIP_ENDPOINT
-    : DEV_DEFAULT_NAME_SHIP_ENDPOINT);
+import { postJson } from '../services/http.js';
+import {
+  computeBulletOriginsFromDiff,
+  expandSpriteSheet,
+  generateShipName,
+  normalizeSprites,
+  resizeSprites,
+  type PartialSprites,
+  type GenerateResponseOk,
+} from '../services/sprites.js';
 
 interface StartWithPromptPayload {
   prompt?: unknown;
 }
 
-interface GenerateResponseOk {
-  imageUrl?: string; // single image URL (older API format)
-  sprites?: Record<string, { url?: string } | undefined>; // new multi-state response fields (may be partial)
-  [k: string]: unknown;
-}
-
-/** Simple JSON POST helper using global fetch (Node 18+) */
-async function postJson(
-  url: string,
-  body: unknown,
-): Promise<{ ok: boolean; status: number; json: unknown }> {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  let data: unknown = null;
-  try {
-    data = await res.json();
-  } catch {
-    /* ignore parse errors; data stays null */
-  }
-  return { ok: res.ok, status: res.status, json: data };
-}
+// Types and low-level HTTP moved to services/
 
 export async function handleStartWithPrompt(
   wss: WebSocketServer,
@@ -107,18 +47,20 @@ export async function handleStartWithPrompt(
   // Kick off name generation in parallel; we'll attach when ready.
   const namePromise = (async () => {
     try {
-      const resp = await postJson(NAME_SHIP_ENDPOINT, { prompt });
-      if (resp.ok && resp.json && typeof resp.json === 'object') {
-        const r = resp.json as { name?: unknown };
-        if (typeof r.name === 'string' && r.name.trim()) return r.name.trim();
-      }
+      const name = await generateShipName(prompt);
+      if (name) return name;
     } catch (e) {
       console.warn('[startWithPrompt] name-ship call failed', e);
     }
     return undefined;
   })();
   try {
-    const resp = await postJson(GENERATE_ENDPOINT, { prompt });
+    const resp = await postJson<GenerateResponseOk>(
+      // generator URL resolved in service layer
+      // using endpoints.ts default resolution
+      (await import('../services/endpoints.js')).GENERATE_SHIP_URL,
+      { prompt },
+    );
     if (!resp.ok) {
       let msgStr = `generation failed (status ${resp.status})`;
       if (resp.json && typeof resp.json === 'object') {
@@ -130,30 +72,9 @@ export async function handleStartWithPrompt(
       return sendJson(socket, { type: 'error', payload: msgStr });
     }
     const data = resp.json as GenerateResponseOk;
-    // New format may return a sprites object
-    if (data && data.sprites && typeof data.sprites === 'object') {
-      // Filter undefined values into concrete record
-      const filtered: PartialSprites = {};
-      for (const [k, v] of Object.entries(data.sprites)) {
-        if (
-          v?.url &&
-          (k === 'thrustersOnMuzzleOn' ||
-            k === 'thrustersOffMuzzleOn' ||
-            k === 'thrustersOnMuzzleOff' ||
-            k === 'thrustersOffMuzzleOff')
-        ) {
-          filtered[k as keyof ShipSprites] = { url: v.url };
-        }
-      }
-      sprites = filtered;
-      imageUrl =
-        sprites.thrustersOffMuzzleOff?.url ||
-        sprites.thrustersOffMuzzleOn?.url ||
-        sprites.thrustersOnMuzzleOff?.url ||
-        sprites.thrustersOnMuzzleOn?.url;
-    } else if (data && typeof data.imageUrl === 'string' && data.imageUrl) {
-      imageUrl = data.imageUrl;
-    }
+    const n = normalizeSprites(data);
+    imageUrl = n.imageUrl;
+    sprites = n.sprites;
     if (!imageUrl) {
       return sendJson(socket, {
         type: 'error',
@@ -163,41 +84,8 @@ export async function handleStartWithPrompt(
 
     // Always request resized versions for every url we currently have (single or multiple)
     try {
-      const imageUrls = sprites
-        ? Object.values(sprites)
-            .map((s) => s.url)
-            .filter((u): u is string => typeof u === 'string' && !!u)
-        : [imageUrl];
       sendJson(socket, { type: 'info', payload: 'resizing base sprite(s)…' });
-      const resizeResp = await postJson(RESIZE_ENDPOINT, {
-        imageUrls,
-        maxWidth: 128,
-        maxHeight: 128,
-      });
-      if (resizeResp.ok && resizeResp.json && typeof resizeResp.json === 'object') {
-        const rr = resizeResp.json as { items?: { sourceUrl?: string; resizedUrl?: string }[] };
-        if (Array.isArray(rr.items)) {
-          const map = new Map<string, string>();
-          for (const it of rr.items) {
-            if (it?.sourceUrl && it?.resizedUrl) map.set(it.sourceUrl, it.resizedUrl);
-          }
-          if (sprites) {
-            const rs: PartialSprites = {};
-            for (const [k, v] of Object.entries(sprites)) {
-              if (v?.url) {
-                const resized = map.get(v.url);
-                if (resized)
-                  rs[k as keyof ShipSprites] = {
-                    url: resized,
-                  };
-              }
-            }
-            resizedSprites = rs;
-          } else if (imageUrl) {
-            // if only base provided, leave for expansion step to populate canonical keys
-          }
-        }
-      }
+      resizedSprites = await resizeSprites(sprites, imageUrl);
     } catch (err) {
       console.warn('[startWithPrompt] resize step failed', err);
     }
@@ -225,71 +113,31 @@ export async function handleStartWithPrompt(
   if (primaryImageUrl && spriteUrlCount < 4) {
     try {
       sendJson(socket, { type: 'info', payload: 'expanding ship sprites…' });
-      const expandResp = await postJson(GENERATE_SPRITE_SHEET_ENDPOINT, {
-        imageUrl: primaryImageUrl,
-      });
-      if (!expandResp.ok) {
-        console.warn('[startWithPrompt] sprite sheet expansion failed', expandResp.status);
-      } else {
-        const expandData = expandResp.json as GenerateResponseOk | undefined;
-        if (expandData?.sprites) {
-          const base: PartialSprites = {};
-          if (sprites) {
-            for (const [k, v] of Object.entries(sprites))
-              if (v?.url) base[k as keyof ShipSprites] = { url: v.url };
-          }
-          for (const [k, v] of Object.entries(expandData.sprites)) {
-            if (
-              v?.url &&
-              (k === 'thrustersOnMuzzleOn' ||
-                k === 'thrustersOffMuzzleOn' ||
-                k === 'thrustersOnMuzzleOff' ||
-                k === 'thrustersOffMuzzleOff')
-            )
-              base[k as keyof ShipSprites] = { url: v.url };
-          }
-          sprites = base;
-          // Resize any urls not already resized
-          try {
-            const toResize = Object.values(base)
-              .map((v) => v.url)
-              .filter(
-                (u) =>
-                  u &&
-                  (!resizedSprites || !Object.values(resizedSprites).some((rv) => rv.url === u)),
-              );
-            if (toResize.length) {
-              sendJson(socket, { type: 'info', payload: 'resizing expanded sprites…' });
-              const resizeResp2 = await postJson(RESIZE_ENDPOINT, {
-                imageUrls: toResize,
-                maxWidth: 128,
-                maxHeight: 128,
-              });
-              if (resizeResp2.ok && resizeResp2.json && typeof resizeResp2.json === 'object') {
-                const rr2 = resizeResp2.json as {
-                  items?: { sourceUrl?: string; resizedUrl?: string }[];
-                };
-                if (Array.isArray(rr2.items)) {
-                  resizedSprites = resizedSprites || ({} as PartialSprites);
-                  const lookup = new Map<string, string>();
-                  for (const it of rr2.items) {
-                    if (it?.sourceUrl && it?.resizedUrl) lookup.set(it.sourceUrl, it.resizedUrl);
-                  }
-                  for (const [k, v] of Object.entries(base)) {
-                    const rz = lookup.get((v as { url: string }).url);
-                    if (rz)
-                      resizedSprites[k as keyof ShipSprites] = {
-                        url: rz,
-                      };
-                  }
-                }
-              }
+      sprites = await expandSpriteSheet(primaryImageUrl, sprites);
+      // Resize any urls not already resized
+      if (sprites) {
+        try {
+          const currentResizedSet = new Set(
+            resizedSprites ? Object.values(resizedSprites).map((r) => r.url) : [],
+          );
+          const toResize = Object.values(sprites)
+            .map((v) => v?.url)
+            .filter((u): u is string => !!u && !currentResizedSet.has(u));
+          if (toResize.length) {
+            sendJson(socket, { type: 'info', payload: 'resizing expanded sprites…' });
+            // reuse resizeSprites by feeding only the missing subset
+            const subset: PartialSprites = {};
+            for (const [k, v] of Object.entries(sprites)) {
+              if (v?.url && toResize.includes(v.url))
+                subset[k as keyof ShipSprites] = { url: v.url };
             }
-          } catch (err) {
-            console.warn('[startWithPrompt] resize expansion step failed', err);
+            const newlyResized = await resizeSprites(subset);
+            if (newlyResized) resizedSprites = { ...(resizedSprites || {}), ...newlyResized };
           }
-          sendJson(socket, { type: 'info', payload: 'sprite sheet ready' });
+        } catch (err) {
+          console.warn('[startWithPrompt] resize expansion step failed', err);
         }
+        sendJson(socket, { type: 'info', payload: 'sprite sheet ready' });
       }
     } catch (err) {
       console.error('[startWithPrompt] sprite sheet expansion error', err);
@@ -310,45 +158,8 @@ export async function handleStartWithPrompt(
   sendJson(socket, { type: 'info', payload: 'computing bullet origins…' });
   let bulletOrigins: { x: number; y: number }[] = [];
   try {
-    const muzzleOffUrl = sprites?.thrustersOnMuzzleOff?.url;
-    const muzzleOnUrl = sprites?.thrustersOnMuzzleOn?.url;
-    if (muzzleOffUrl && muzzleOnUrl) {
-      const diffResp = await postJson(DIFF_BOUNDING_BOX_ENDPOINT, {
-        imageUrlA: muzzleOffUrl,
-        imageUrlB: muzzleOnUrl,
-        threshold: 0.03,
-        minBoxArea: 500,
-        minClusterPixels: 500,
-      });
-      if (diffResp.ok && diffResp.json && typeof diffResp.json === 'object') {
-        const diffJson = diffResp.json as {
-          boxes?: { x: number; y: number; width: number; height: number }[];
-          imageWidth?: number;
-          imageHeight?: number;
-        };
-        if (
-          Array.isArray(diffJson.boxes) &&
-          typeof diffJson.imageWidth === 'number' &&
-          typeof diffJson.imageHeight === 'number'
-        ) {
-          const fullW = diffJson.imageWidth;
-          const fullH = diffJson.imageHeight;
-          const cx = fullW / 2;
-          const cy = fullH / 2;
-          const TARGET_SIZE = 128;
-          const scaleX = TARGET_SIZE / fullW;
-          const scaleY = TARGET_SIZE / fullH;
-          const CENTER_Y_EXTRA = 20;
-          bulletOrigins = diffJson.boxes.map((b) => {
-            const centerOx = b.x + b.width / 2 - cx;
-            const centerOy = b.y + b.height / 2 - cy; // +y down
-            const scaledX = centerOx * scaleX;
-            const scaledY = centerOy * scaleY + CENTER_Y_EXTRA; // push downward
-            return { x: scaledX, y: scaledY };
-          });
-        }
-      }
-    }
+    const maybe = await computeBulletOriginsFromDiff(sprites);
+    if (maybe) bulletOrigins = maybe;
   } catch (err) {
     console.warn('[startWithPrompt] diff-bounding-box step failed', err);
   }
