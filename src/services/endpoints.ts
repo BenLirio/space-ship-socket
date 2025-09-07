@@ -28,3 +28,7 @@ export const isProd = () => process.env.NODE_ENV === 'production';
 
 // Scoreboard service
 export const SCOREBOARD_URL = process.env.SCOREBOARD_URL || withBase('/scoreboard');
+
+// Remaining ships quota for a given client IP
+export const GET_NUM_REMAINING_SHIPS_URL =
+  process.env.GET_NUM_REMAINING_SHIPS_URL || withBase('/get-num-remaining-ships');

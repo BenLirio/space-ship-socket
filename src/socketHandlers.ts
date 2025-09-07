@@ -11,6 +11,7 @@ import type { CustomWebSocket } from './types/socket.js';
 import { randomUUID } from 'crypto';
 import { initGameLoop } from './game/loop.js';
 import { scoreboardList } from './services/scoreboard.js';
+import { getRemainingShips } from './services/shipsQuota.js';
 
 // Concrete handler overload resolution via narrow mapping then widened when accessed dynamically
 const specificHandlers = {
@@ -55,6 +56,21 @@ export function attachSocketHandlers(wss: WebSocketServer) {
       } catch (err) {
         // non-fatal
         console.warn('[scoreboard] list on join failed', err);
+      }
+    })();
+
+    // Fire-and-forget: fetch remaining ships quota for this IP and send to the client
+    void (async () => {
+      if (!socket.ip) return;
+      try {
+        const quota = await getRemainingShips({ clientIp: socket.ip });
+        if (quota) {
+          const { remaining, cap } = quota;
+          sendJson(socket, { type: 'shipQuota', payload: { remaining, cap } });
+        }
+      } catch (err) {
+        // non-fatal
+        console.warn('[shipQuota] fetch on join failed', err);
       }
     })();
 
