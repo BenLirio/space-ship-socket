@@ -134,7 +134,7 @@ export async function computeBulletOriginsFromDiff(
     {
       imageUrlA: muzzleOffUrl,
       imageUrlB: muzzleOnUrl,
-      threshold: 0.03,
+      threshold: 0.6,
       minBoxArea: 500,
       minClusterPixels: 500,
     },
