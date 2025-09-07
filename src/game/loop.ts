@@ -49,19 +49,17 @@ export function initGameLoop(wss: WebSocketServer): InternalLoopState {
   const inputs: Record<string, InputState> = {};
 
   const simInterval = setInterval(() => {
-    for (const [id, ship] of Object.entries(gameState.ships)) {
-      simulateShip(loop!, ship, inputs[id]);
-    }
+    Object.entries(gameState.ships).forEach(([id, ship]) => simulateShip(loop!, ship, inputs[id]));
     simulateProjectiles(loop!, SIM_DT);
     const now = Date.now();
     let purged = 0;
-    for (const [id, input] of Object.entries(inputs)) {
+    Object.entries(inputs).forEach(([id, input]) => {
       if (now - input.lastInputAt > SHIP_EXPIRY_MS) {
         delete inputs[id];
         delete gameState.ships[id];
         purged++;
       }
-    }
+    });
     if (purged) console.log(`[sim] Purged ${purged} inactive ship(s)`);
   }, 1000 / SIM_HZ);
 

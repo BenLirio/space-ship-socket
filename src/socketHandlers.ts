@@ -72,8 +72,7 @@ export function attachSocketHandlers(wss: WebSocketServer) {
       }
     });
 
-    socket.on('close', () => {
-      // no-op for now
-    });
+    // No cleanup needed on close currently
+    socket.on('close', () => undefined);
   });
 }

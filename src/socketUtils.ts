@@ -8,9 +8,7 @@ export function sendJson(socket: WebSocket, msg: OutgoingMessage) {
 
 export function broadcast(wss: WebSocketServer, data: OutgoingMessage, except?: WebSocket) {
   const encoded = JSON.stringify(data);
-  for (const client of wss.clients) {
-    if (client.readyState === WebSocket.OPEN && client !== except) {
-      client.send(encoded);
-    }
-  }
+  Array.from(wss.clients)
+    .filter((c) => c.readyState === WebSocket.OPEN && c !== except)
+    .forEach((c) => c.send(encoded));
 }

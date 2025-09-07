@@ -56,51 +56,43 @@ export async function handleStartWithPrompt(
   })();
   try {
     const resp = await postJson<GenerateResponseOk>(
-      // generator URL resolved in service layer
-      // using endpoints.ts default resolution
       (await import('../services/endpoints.js')).GENERATE_SHIP_URL,
       { prompt },
     );
-    if (!resp.ok) {
-      let msgStr = `generation failed (status ${resp.status})`;
-      if (resp.json && typeof resp.json === 'object') {
-        const maybe = resp.json as Record<string, unknown>;
-        if (typeof maybe.message === 'string' && maybe.message.trim()) {
-          msgStr = maybe.message;
-        }
-      }
-      return sendJson(socket, { type: 'error', payload: msgStr });
-    }
-    const data = resp.json as GenerateResponseOk;
-    const n = normalizeSprites(data);
-    imageUrl = n.imageUrl;
-    sprites = n.sprites;
-    if (!imageUrl) {
+    if (!resp.ok)
+      return sendJson(socket, {
+        type: 'error',
+        payload:
+          (resp.json &&
+            typeof resp.json === 'object' &&
+            (resp.json as Record<string, unknown>).message &&
+            String((resp.json as Record<string, unknown>).message)) ||
+          `generation failed (status ${resp.status})`,
+      });
+
+    const { imageUrl: img, sprites: spr } = normalizeSprites(resp.json as GenerateResponseOk);
+    imageUrl = img;
+    sprites = spr;
+    if (!imageUrl)
       return sendJson(socket, {
         type: 'error',
         payload: 'generation succeeded but missing image(s)',
       });
-    }
 
-    // Always request resized versions for every url we currently have (single or multiple)
-    try {
-      sendJson(socket, { type: 'info', payload: 'resizing base sprite(s)…' });
-      resizedSprites = await resizeSprites(sprites, imageUrl);
-    } catch (err) {
+    // Resize base sprite(s)
+    sendJson(socket, { type: 'info', payload: 'resizing base sprite(s)…' });
+    resizedSprites = await resizeSprites(sprites, imageUrl).catch((err) => {
       console.warn('[startWithPrompt] resize step failed', err);
-    }
+      return undefined;
+    });
 
-    // If resize failed, fall back to original URLs so downstream logic can rely on resizedSprites existing.
-    if (!resizedSprites) {
-      if (sprites) {
-        const rs: PartialSprites = {};
-        for (const [k, v] of Object.entries(sprites))
-          if (v?.url)
-            rs[k as keyof ShipSprites] = {
-              url: v.url,
-            };
-        if (Object.keys(rs).length) resizedSprites = rs;
-      }
+    // Fallback: mirror original urls if resize failed
+    if (!resizedSprites && sprites) {
+      const rs: PartialSprites = Object.entries(sprites).reduce((acc, [k, v]) => {
+        if (v?.url) acc[k as keyof ShipSprites] = { url: v.url };
+        return acc;
+      }, {} as PartialSprites);
+      if (Object.keys(rs).length) resizedSprites = rs;
     }
   } catch (err) {
     console.error('[startWithPrompt] generation error', err);
@@ -109,33 +101,28 @@ export async function handleStartWithPrompt(
 
   // Expand to full sprite sheet if we currently have fewer than 4 variants
   const spriteUrlCount = sprites ? Object.keys(sprites).length : 0;
-  const primaryImageUrl = imageUrl; // for second call
+  const primaryImageUrl = imageUrl;
   if (primaryImageUrl && spriteUrlCount < 4) {
     try {
       sendJson(socket, { type: 'info', payload: 'expanding ship sprites…' });
       sprites = await expandSpriteSheet(primaryImageUrl, sprites);
-      // Resize any urls not already resized
       if (sprites) {
-        try {
-          const currentResizedSet = new Set(
-            resizedSprites ? Object.values(resizedSprites).map((r) => r.url) : [],
-          );
-          const toResize = Object.values(sprites)
-            .map((v) => v?.url)
-            .filter((u): u is string => !!u && !currentResizedSet.has(u));
-          if (toResize.length) {
-            sendJson(socket, { type: 'info', payload: 'resizing expanded sprites…' });
-            // reuse resizeSprites by feeding only the missing subset
-            const subset: PartialSprites = {};
-            for (const [k, v] of Object.entries(sprites)) {
-              if (v?.url && toResize.includes(v.url))
-                subset[k as keyof ShipSprites] = { url: v.url };
-            }
-            const newlyResized = await resizeSprites(subset);
-            if (newlyResized) resizedSprites = { ...(resizedSprites || {}), ...newlyResized };
-          }
-        } catch (err) {
-          console.warn('[startWithPrompt] resize expansion step failed', err);
+        const currentResizedSet = new Set(
+          resizedSprites ? Object.values(resizedSprites).map((r) => r.url) : [],
+        );
+        const subset: PartialSprites = Object.entries(sprites).reduce((acc, [k, v]) => {
+          const u = v?.url;
+          if (u && !currentResizedSet.has(u)) acc[k as keyof ShipSprites] = { url: u };
+          return acc;
+        }, {} as PartialSprites);
+        const hasSubset = Object.keys(subset).length > 0;
+        if (hasSubset) {
+          sendJson(socket, { type: 'info', payload: 'resizing expanded sprites…' });
+          const newlyResized = await resizeSprites(subset).catch((err) => {
+            console.warn('[startWithPrompt] resize expansion step failed', err);
+            return undefined;
+          });
+          if (newlyResized) resizedSprites = { ...(resizedSprites || {}), ...newlyResized };
         }
         sendJson(socket, { type: 'info', payload: 'sprite sheet ready' });
       }
@@ -146,66 +133,54 @@ export async function handleStartWithPrompt(
 
   // Ensure we have concrete structures after possible fallbacks
   resizedSprites = resizedSprites || ({} as PartialSprites);
-  if (!sprites) {
-    // Build sprites record from whatever we resized
-    const s: PartialSprites = {};
-    for (const [k, v] of Object.entries(resizedSprites))
-      s[k as keyof ShipSprites] = { url: (v as { url: string }).url };
-    sprites = s;
-  }
+  if (!sprites)
+    sprites = Object.entries(resizedSprites).reduce((acc, [k, v]) => {
+      acc[k as keyof ShipSprites] = { url: (v as { url: string }).url };
+      return acc;
+    }, {} as PartialSprites);
 
   // Compute bullet origins by diffing thrustersOnMuzzleOff vs thrustersOnMuzzleOn
   sendJson(socket, { type: 'info', payload: 'computing bullet origins…' });
-  let bulletOrigins: { x: number; y: number }[] = [];
-  try {
-    const maybe = await computeBulletOriginsFromDiff(sprites);
-    if (maybe) bulletOrigins = maybe;
-  } catch (err) {
-    console.warn('[startWithPrompt] diff-bounding-box step failed', err);
-  }
-
-  if (!bulletOrigins.length) {
-    // Fallback twin guns
-    bulletOrigins = [
-      { x: -10, y: -30 },
-      { x: 10, y: -30 },
-    ];
-    sendJson(socket, {
-      type: 'info',
-      payload: 'bullet origins fallback applied',
-    });
-  } else {
-    sendJson(socket, {
-      type: 'info',
-      payload: `computed ${bulletOrigins.length} bullet origin(s)`,
-    });
-  }
+  const bulletOrigins = await computeBulletOriginsFromDiff(sprites)
+    .catch((err) => {
+      console.warn('[startWithPrompt] diff-bounding-box step failed', err);
+      return undefined;
+    })
+    .then((maybe) =>
+      maybe && maybe.length
+        ? maybe
+        : [
+            { x: -10, y: -30 },
+            { x: 10, y: -30 },
+          ],
+    );
+  sendJson(socket, {
+    type: 'info',
+    payload:
+      bulletOrigins.length === 2
+        ? 'bullet origins fallback applied'
+        : `computed ${bulletOrigins.length} bullet origin(s)`,
+  });
 
   // Name resolution (await with fallback)
   sendJson(socket, { type: 'info', payload: 'generating ship name…' });
-  let name = await namePromise;
-  if (!name) {
-    name = `ship ${Math.floor(Math.random() * 100000)
+  const name =
+    (await namePromise) ||
+    `ship ${Math.floor(Math.random() * 100000)
       .toString()
       .padStart(5, '0')}`;
-    sendJson(socket, { type: 'info', payload: `name service unavailable, using: ${name}` });
-  } else {
-    sendJson(socket, { type: 'info', payload: `ship named: ${name}` });
-  }
+  sendJson(socket, { type: 'info', payload: `ship named: ${name}` });
 
   // Final readiness checks
   // Finalize concrete ShipSprites ensuring all four keys exist
-  function completeSprites(
+  const completeSprites = (
     p: Partial<Record<keyof ShipSprites, { url: string }>> | undefined,
-  ): p is ShipSprites {
-    return (
-      !!p &&
-      !!p.thrustersOnMuzzleOn &&
-      !!p.thrustersOffMuzzleOn &&
-      !!p.thrustersOnMuzzleOff &&
-      !!p.thrustersOffMuzzleOff
-    );
-  }
+  ): p is ShipSprites =>
+    !!p &&
+    !!p.thrustersOnMuzzleOn &&
+    !!p.thrustersOffMuzzleOn &&
+    !!p.thrustersOnMuzzleOff &&
+    !!p.thrustersOffMuzzleOff;
 
   if (!completeSprites(sprites) || !completeSprites(resizedSprites)) {
     return sendJson(socket, {

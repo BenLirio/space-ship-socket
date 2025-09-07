@@ -23,26 +23,24 @@ export function normalizeSprites(data: GenerateResponseOk): {
   let imageUrl: string | undefined;
   let sprites: PartialSprites | undefined;
 
-  if (data && data.sprites && typeof data.sprites === 'object') {
-    const filtered: PartialSprites = {};
-    for (const [k, v] of Object.entries(data.sprites)) {
-      if (
-        v?.url &&
-        (k === 'thrustersOnMuzzleOn' ||
-          k === 'thrustersOffMuzzleOn' ||
-          k === 'thrustersOnMuzzleOff' ||
-          k === 'thrustersOffMuzzleOff')
-      ) {
-        filtered[k as keyof ShipSprites] = { url: v.url };
-      }
-    }
+  if (data?.sprites && typeof data.sprites === 'object') {
+    const keys = [
+      'thrustersOnMuzzleOn',
+      'thrustersOffMuzzleOn',
+      'thrustersOnMuzzleOff',
+      'thrustersOffMuzzleOff',
+    ] as (keyof ShipSprites)[];
+    const filtered = Object.entries(data.sprites).reduce((acc, [k, v]) => {
+      if ((keys as string[]).includes(k) && v?.url) acc[k as keyof ShipSprites] = { url: v.url };
+      return acc;
+    }, {} as PartialSprites);
     sprites = filtered;
     imageUrl =
       sprites.thrustersOffMuzzleOff?.url ||
       sprites.thrustersOffMuzzleOn?.url ||
       sprites.thrustersOnMuzzleOff?.url ||
       sprites.thrustersOnMuzzleOn?.url;
-  } else if (data && typeof data.imageUrl === 'string' && data.imageUrl) {
+  } else if (typeof data?.imageUrl === 'string' && data.imageUrl) {
     imageUrl = data.imageUrl;
   }
 
@@ -72,9 +70,9 @@ export async function resizeSprites(
   if (!resizeResp.ok || !resizeResp.json || !Array.isArray(resizeResp.json.items)) return undefined;
 
   const map = new Map<string, string>();
-  for (const it of resizeResp.json.items) {
+  resizeResp.json.items.forEach((it) => {
     if (it?.sourceUrl && it?.resizedUrl) map.set(it.sourceUrl, it.resizedUrl);
-  }
+  });
 
   if (sprites) {
     const rs: PartialSprites = {};
@@ -102,16 +100,15 @@ export async function expandSpriteSheet(
   if (!expandData.sprites) return existing;
 
   const base: PartialSprites = { ...(existing || {}) };
-  for (const [k, v] of Object.entries(expandData.sprites)) {
-    if (
-      v?.url &&
-      (k === 'thrustersOnMuzzleOn' ||
-        k === 'thrustersOffMuzzleOn' ||
-        k === 'thrustersOnMuzzleOff' ||
-        k === 'thrustersOffMuzzleOff')
-    )
-      base[k as keyof ShipSprites] = { url: v.url };
-  }
+  const keys = [
+    'thrustersOnMuzzleOn',
+    'thrustersOffMuzzleOn',
+    'thrustersOnMuzzleOff',
+    'thrustersOffMuzzleOff',
+  ];
+  Object.entries(expandData.sprites).forEach(([k, v]) => {
+    if (v?.url && (keys as string[]).includes(k)) base[k as keyof ShipSprites] = { url: v.url };
+  });
   return base;
 }
 
@@ -147,13 +144,10 @@ export async function computeBulletOriginsFromDiff(
   const scaleX = TARGET_SIZE / fullW;
   const scaleY = TARGET_SIZE / fullH;
   const CENTER_Y_EXTRA = 20;
-  return boxes.map((b) => {
-    const centerOx = b.x + b.width / 2 - cx;
-    const centerOy = b.y + b.height / 2 - cy; // +y down
-    const scaledX = centerOx * scaleX;
-    const scaledY = centerOy * scaleY + CENTER_Y_EXTRA; // push downward
-    return { x: scaledX, y: scaledY };
-  });
+  return boxes.map((b) => ({
+    x: (b.x + b.width / 2 - cx) * scaleX,
+    y: (b.y + b.height / 2 - cy) * scaleY + CENTER_Y_EXTRA,
+  }));
 }
 
 export async function generateShipName(prompt: string): Promise<string | undefined> {
@@ -170,8 +164,6 @@ export function preferUrlFrom(s: PartialSprites): string | undefined {
   try {
     return preferredSpriteUrl(maybeComplete);
   } catch {
-    // fallback to any available url
-    for (const v of Object.values(s)) if (v?.url) return v.url;
-    return undefined;
+    return Object.values(s).find((v) => v?.url)?.url;
   }
 }
