@@ -3,14 +3,14 @@ import type { WebSocketServer } from 'ws';
 import type { IncomingMessage } from '../types/messages.js';
 import { broadcast, sendJson } from '../socketUtils.js';
 import type { CustomWebSocket } from '../types/socket.js';
-import type { ShipState } from '../types/game.js';
+import type { ShipState, ShipSprites } from '../types/game.js';
 import { getGameState } from '../game/loop.js';
 import { randomSpawn } from '../game/spawn.js';
 import { preferredSpriteUrl } from '../game/sprites.js';
 
 // Default full-size (original) sprite variants pulled from captured gameState sample
 // These are the "generated" originals (non-resized) for each state.
-const DEFAULT_FULL_SPRITES = {
+const DEFAULT_FULL_SPRITES: ShipSprites = {
   thrustersOnMuzzleOff: {
     url: 'https://space-ship-sprites.s3.amazonaws.com/generated/6c3d3780-44be-4158-9f40-b194af7a5f75.png',
   },
@@ -26,7 +26,7 @@ const DEFAULT_FULL_SPRITES = {
 } as const;
 
 // Corresponding resized sprite variants (preferred by clients)
-const DEFAULT_RESIZED_SPRITES = {
+const DEFAULT_RESIZED_SPRITES: ShipSprites = {
   thrustersOnMuzzleOff: {
     url: 'https://space-ship-sprites.s3.amazonaws.com/resized/1ae92aa5ac921cba17f46bf51179c02b2888305d.png',
   },
@@ -80,9 +80,7 @@ export function handleStartWithDefault(
     kills: 0,
     bulletOrigins: [...DEFAULT_BULLET_ORIGINS],
     appearance: {
-      shipImageUrl:
-        preferredSpriteUrl(DEFAULT_RESIZED_SPRITES) ||
-        DEFAULT_RESIZED_SPRITES.thrustersOffMuzzleOff.url,
+      shipImageUrl: preferredSpriteUrl(DEFAULT_RESIZED_SPRITES),
     },
     lastUpdatedAt: Date.now(),
   };

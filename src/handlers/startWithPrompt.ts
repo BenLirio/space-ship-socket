@@ -3,7 +3,9 @@ import type { WebSocketServer } from 'ws';
 import type { IncomingMessage } from '../types/messages.js';
 import { broadcast, sendJson } from '../socketUtils.js';
 import type { CustomWebSocket } from '../types/socket.js';
-import type { ShipState } from '../types/game.js';
+import type { ShipState, ShipSprites } from '../types/game.js';
+
+type PartialSprites = Partial<Record<keyof ShipSprites, { url: string }>>;
 import { getGameState } from '../game/loop.js';
 import { preferredSpriteUrl } from '../game/sprites.js';
 import { randomSpawn } from '../game/spawn.js';
@@ -100,8 +102,8 @@ export async function handleStartWithPrompt(
   const entityId = (socket as CustomWebSocket).id;
   sendJson(socket, { type: 'info', payload: 'generating base ship image…' });
   let imageUrl: string | undefined;
-  let sprites: Record<string, { url?: string }> | undefined;
-  let resizedSprites: Record<string, { url: string }> | undefined;
+  let sprites: PartialSprites | undefined;
+  let resizedSprites: PartialSprites | undefined;
   // Kick off name generation in parallel; we'll attach when ready.
   const namePromise = (async () => {
     try {
@@ -131,17 +133,24 @@ export async function handleStartWithPrompt(
     // New format may return a sprites object
     if (data && data.sprites && typeof data.sprites === 'object') {
       // Filter undefined values into concrete record
-      const filtered: Record<string, { url?: string }> = {};
+      const filtered: PartialSprites = {};
       for (const [k, v] of Object.entries(data.sprites)) {
-        if (v) filtered[k] = v;
+        if (
+          v?.url &&
+          (k === 'thrustersOnMuzzleOn' ||
+            k === 'thrustersOffMuzzleOn' ||
+            k === 'thrustersOnMuzzleOff' ||
+            k === 'thrustersOffMuzzleOff')
+        ) {
+          filtered[k as keyof ShipSprites] = { url: v.url };
+        }
       }
       sprites = filtered;
       imageUrl =
-        sprites['thrustersOffMuzzleOff']?.url ||
-        sprites['thrustersOffMuzzleOn']?.url ||
-        sprites['thrustersOnMuzzleOff']?.url ||
-        sprites['thrustersOnMuzzleOn']?.url ||
-        Object.values(sprites).find((s) => s.url)?.url;
+        sprites.thrustersOffMuzzleOff?.url ||
+        sprites.thrustersOffMuzzleOn?.url ||
+        sprites.thrustersOnMuzzleOff?.url ||
+        sprites.thrustersOnMuzzleOn?.url;
     } else if (data && typeof data.imageUrl === 'string' && data.imageUrl) {
       imageUrl = data.imageUrl;
     }
@@ -173,19 +182,19 @@ export async function handleStartWithPrompt(
             if (it?.sourceUrl && it?.resizedUrl) map.set(it.sourceUrl, it.resizedUrl);
           }
           if (sprites) {
-            const rs: Record<string, { url: string }> = {};
+            const rs: PartialSprites = {};
             for (const [k, v] of Object.entries(sprites)) {
               if (v?.url) {
                 const resized = map.get(v.url);
-                if (resized) rs[k] = { url: resized };
+                if (resized)
+                  rs[k as keyof ShipSprites] = {
+                    url: resized,
+                  };
               }
             }
             resizedSprites = rs;
           } else if (imageUrl) {
-            const resized = map.get(imageUrl);
-            if (resized) {
-              resizedSprites = { base: { url: resized } };
-            }
+            // if only base provided, leave for expansion step to populate canonical keys
           }
         }
       }
@@ -196,11 +205,13 @@ export async function handleStartWithPrompt(
     // If resize failed, fall back to original URLs so downstream logic can rely on resizedSprites existing.
     if (!resizedSprites) {
       if (sprites) {
-        const rs: Record<string, { url: string }> = {};
-        for (const [k, v] of Object.entries(sprites)) if (v?.url) rs[k] = { url: v.url };
+        const rs: PartialSprites = {};
+        for (const [k, v] of Object.entries(sprites))
+          if (v?.url)
+            rs[k as keyof ShipSprites] = {
+              url: v.url,
+            };
         if (Object.keys(rs).length) resizedSprites = rs;
-      } else if (imageUrl) {
-        resizedSprites = { base: { url: imageUrl } };
       }
     }
   } catch (err) {
@@ -209,9 +220,7 @@ export async function handleStartWithPrompt(
   }
 
   // Expand to full sprite sheet if we currently have fewer than 4 variants
-  const spriteUrlCount = sprites
-    ? Object.values(sprites).filter((v) => v && typeof v.url === 'string' && v.url).length
-    : 0;
+  const spriteUrlCount = sprites ? Object.keys(sprites).length : 0;
   const primaryImageUrl = imageUrl; // for second call
   if (primaryImageUrl && spriteUrlCount < 4) {
     try {
@@ -224,12 +233,20 @@ export async function handleStartWithPrompt(
       } else {
         const expandData = expandResp.json as GenerateResponseOk | undefined;
         if (expandData?.sprites) {
-          const base: Record<string, { url: string }> = {};
+          const base: PartialSprites = {};
           if (sprites) {
-            for (const [k, v] of Object.entries(sprites)) if (v?.url) base[k] = { url: v.url };
+            for (const [k, v] of Object.entries(sprites))
+              if (v?.url) base[k as keyof ShipSprites] = { url: v.url };
           }
           for (const [k, v] of Object.entries(expandData.sprites)) {
-            if (v?.url) base[k] = { url: v.url };
+            if (
+              v?.url &&
+              (k === 'thrustersOnMuzzleOn' ||
+                k === 'thrustersOffMuzzleOn' ||
+                k === 'thrustersOnMuzzleOff' ||
+                k === 'thrustersOffMuzzleOff')
+            )
+              base[k as keyof ShipSprites] = { url: v.url };
           }
           sprites = base;
           // Resize any urls not already resized
@@ -253,14 +270,17 @@ export async function handleStartWithPrompt(
                   items?: { sourceUrl?: string; resizedUrl?: string }[];
                 };
                 if (Array.isArray(rr2.items)) {
-                  resizedSprites = resizedSprites || ({} as Record<string, { url: string }>);
+                  resizedSprites = resizedSprites || ({} as PartialSprites);
                   const lookup = new Map<string, string>();
                   for (const it of rr2.items) {
                     if (it?.sourceUrl && it?.resizedUrl) lookup.set(it.sourceUrl, it.resizedUrl);
                   }
                   for (const [k, v] of Object.entries(base)) {
-                    const rz = lookup.get(v.url);
-                    if (rz) resizedSprites[k] = { url: rz };
+                    const rz = lookup.get((v as { url: string }).url);
+                    if (rz)
+                      resizedSprites[k as keyof ShipSprites] = {
+                        url: rz,
+                      };
                   }
                 }
               }
@@ -277,11 +297,12 @@ export async function handleStartWithPrompt(
   }
 
   // Ensure we have concrete structures after possible fallbacks
-  resizedSprites = resizedSprites || ({} as Record<string, { url: string }>);
+  resizedSprites = resizedSprites || ({} as PartialSprites);
   if (!sprites) {
     // Build sprites record from whatever we resized
-    const s: Record<string, { url: string }> = {};
-    for (const [k, v] of Object.entries(resizedSprites)) s[k] = { url: v.url };
+    const s: PartialSprites = {};
+    for (const [k, v] of Object.entries(resizedSprites))
+      s[k as keyof ShipSprites] = { url: (v as { url: string }).url };
     sprites = s;
   }
 
@@ -289,8 +310,8 @@ export async function handleStartWithPrompt(
   sendJson(socket, { type: 'info', payload: 'computing bullet origins…' });
   let bulletOrigins: { x: number; y: number }[] = [];
   try {
-    const muzzleOffUrl = sprites?.['thrustersOnMuzzleOff']?.url;
-    const muzzleOnUrl = sprites?.['thrustersOnMuzzleOn']?.url;
+    const muzzleOffUrl = sprites?.thrustersOnMuzzleOff?.url;
+    const muzzleOnUrl = sprites?.thrustersOnMuzzleOn?.url;
     if (muzzleOffUrl && muzzleOnUrl) {
       const diffResp = await postJson(DIFF_BOUNDING_BOX_ENDPOINT, {
         imageUrlA: muzzleOffUrl,
@@ -362,27 +383,34 @@ export async function handleStartWithPrompt(
   }
 
   // Final readiness checks
-  const preferredUrl = preferredSpriteUrl(resizedSprites) || imageUrl;
-  if (
-    !preferredUrl ||
-    !sprites ||
-    !Object.keys(sprites).length ||
-    !resizedSprites ||
-    !Object.keys(resizedSprites).length
-  ) {
+  // Finalize concrete ShipSprites ensuring all four keys exist
+  function completeSprites(
+    p: Partial<Record<keyof ShipSprites, { url: string }>> | undefined,
+  ): p is ShipSprites {
+    return (
+      !!p &&
+      !!p.thrustersOnMuzzleOn &&
+      !!p.thrustersOffMuzzleOn &&
+      !!p.thrustersOnMuzzleOff &&
+      !!p.thrustersOffMuzzleOff
+    );
+  }
+
+  if (!completeSprites(sprites) || !completeSprites(resizedSprites)) {
     return sendJson(socket, {
       type: 'error',
       payload: 'failed to prepare complete ship assets',
     });
   }
+  const preferredUrl = preferredSpriteUrl(resizedSprites);
 
   // Construct the full ShipState and broadcast once
   const spawn = randomSpawn();
   const ship: ShipState = {
     physics: { position: { x: spawn.x, y: spawn.y }, rotation: spawn.rotation },
     name,
-    sprites: sprites as Record<string, { url: string }>,
-    resizedSprites: resizedSprites as Record<string, { url: string }>,
+    sprites,
+    resizedSprites,
     health: 100,
     kills: 0,
     bulletOrigins,

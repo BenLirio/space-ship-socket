@@ -123,23 +123,11 @@ export function simulateShip(
     const muzzleActive =
       !!input && input.muzzleFlashUntil !== undefined && now < input.muzzleFlashUntil;
 
-    const variantOrder: { thrust: boolean; muzzle: boolean; keys: string[] }[] = [
-      { thrust: true, muzzle: true, keys: ['thrustersOnMuzzleOn'] },
-      { thrust: false, muzzle: true, keys: ['thrustersOffMuzzleOn'] },
-      { thrust: true, muzzle: false, keys: ['thrustersOnMuzzleOff'] },
-      { thrust: false, muzzle: false, keys: ['thrustersOffMuzzleOff'] },
-    ];
-
     function resolveVariant(thrust: boolean, muzzle: boolean): { url: string } | undefined {
-      for (const v of variantOrder) {
-        if (v.thrust === thrust && v.muzzle === muzzle) {
-          for (const key of v.keys) {
-            const found = (ship.resizedSprites as Record<string, { url: string } | undefined>)[key];
-            if (found?.url) return found;
-          }
-        }
-      }
-      return undefined;
+      if (thrust && muzzle) return ship.resizedSprites.thrustersOnMuzzleOn;
+      if (!thrust && muzzle) return ship.resizedSprites.thrustersOffMuzzleOn;
+      if (thrust && !muzzle) return ship.resizedSprites.thrustersOnMuzzleOff;
+      return ship.resizedSprites.thrustersOffMuzzleOff;
     }
 
     let variant = resolveVariant(thrustActive, muzzleActive);

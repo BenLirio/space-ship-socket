@@ -1,16 +1,10 @@
-export function preferredSpriteUrl(
-  sprites?: Record<string, { url?: string } | undefined>,
-): string | undefined {
-  if (!sprites) return undefined;
-  const order = [
-    'thrustersOffMuzzleOff',
-    'thrustersOffMuzzleOn',
-    'thrustersOnMuzzleOff',
-    'thrustersOnMuzzleOn',
-  ];
-  for (const k of order) {
-    const url = sprites[k]?.url;
-    if (url) return url;
-  }
-  return Object.values(sprites).find((s) => s?.url)?.url;
+import type { ShipSprites } from '../types/game.js';
+
+export function preferredSpriteUrl(sprites: ShipSprites): string {
+  return (
+    sprites.thrustersOffMuzzleOff?.url ||
+    sprites.thrustersOffMuzzleOn?.url ||
+    sprites.thrustersOnMuzzleOff?.url ||
+    sprites.thrustersOnMuzzleOn?.url
+  );
 }

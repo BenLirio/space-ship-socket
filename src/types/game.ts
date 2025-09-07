@@ -8,11 +8,10 @@ export interface Vector2 {
 // Sprite variants keyed by state name (matches generator response "sprites")
 export interface ShipSprites {
   // Canonical sprite variant keys (v2.0.0+)
-  thrustersOnMuzzleOn?: { url: string };
-  thrustersOffMuzzleOn?: { url: string };
-  thrustersOnMuzzleOff?: { url: string };
-  thrustersOffMuzzleOff?: { url: string };
-  [k: string]: { url: string } | undefined; // allow future expansion
+  thrustersOnMuzzleOn: { url: string };
+  thrustersOffMuzzleOn: { url: string };
+  thrustersOnMuzzleOff: { url: string };
+  thrustersOffMuzzleOff: { url: string };
 }
 
 export interface ShipState {
