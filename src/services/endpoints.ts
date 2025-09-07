@@ -24,6 +24,8 @@ export const DIFF_BOUNDING_BOX_URL =
 
 export const NAME_SHIP_URL = process.env.NAME_SHIP_URL || withBase('/name-ship');
 
+export const EXPAND_PROMPT_URL = process.env.EXPAND_PROMPT_URL || withBase('/expand-prompt');
+
 export const isProd = () => process.env.NODE_ENV === 'production';
 
 // Scoreboard service

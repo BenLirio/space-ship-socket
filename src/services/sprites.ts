@@ -5,6 +5,7 @@ import {
   GENERATE_SPRITE_SHEET_URL,
   NAME_SHIP_URL,
   RESIZE_SPRITES_URL,
+  EXPAND_PROMPT_URL,
 } from './endpoints.js';
 import { postJson } from './http.js';
 
@@ -173,6 +174,19 @@ export async function generateShipName(
     return resp.json.name.trim();
   }
   return undefined;
+}
+
+export async function expandPrompt(
+  prompt: string,
+  ctx?: { clientIp?: string },
+): Promise<string | undefined> {
+  const resp = await postJson<{ expandedPrompt?: string }>(
+    EXPAND_PROMPT_URL,
+    { prompt },
+    { headers: { 'x-client-ip': ctx?.clientIp } },
+  );
+  const ep = resp.json && (resp.json as { expandedPrompt?: string }).expandedPrompt;
+  return typeof ep === 'string' && ep.trim() ? ep.trim() : undefined;
 }
 
 export function preferUrlFrom(s: PartialSprites): string | undefined {

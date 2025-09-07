@@ -46,10 +46,19 @@ export async function handleStartWithPrompt(
   let resizedSprites: PartialSprites | undefined;
   const clientIp = (socket as unknown as { ip?: string }).ip;
   const ctx = clientIp ? { clientIp } : undefined;
+  // First, expand the prompt
+  sendJson(socket, { type: 'info', payload: 'expanding prompt…' });
+  const { expandPrompt } = await import('../services/sprites.js');
+  const expandedPrompt = (await expandPrompt(prompt, ctx)) || prompt;
+  if (expandedPrompt !== prompt) {
+    sendJson(socket, { type: 'info', payload: 'prompt expanded' });
+  } else {
+    sendJson(socket, { type: 'info', payload: 'using original prompt' });
+  }
   // Kick off name generation in parallel; we'll attach when ready.
   const namePromise = (async () => {
     try {
-      const name = await generateShipName(prompt);
+      const name = await generateShipName(expandedPrompt);
       if (name) return name;
     } catch (e) {
       console.warn('[startWithPrompt] name-ship call failed', e);
@@ -59,7 +68,7 @@ export async function handleStartWithPrompt(
   try {
     const resp = await postJson<GenerateResponseOk>(
       (await import('../services/endpoints.js')).GENERATE_SHIP_URL,
-      { prompt },
+      { prompt: expandedPrompt },
       { headers: { 'x-client-ip': clientIp } },
     );
     if (!resp.ok)
