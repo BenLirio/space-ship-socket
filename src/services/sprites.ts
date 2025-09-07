@@ -53,6 +53,7 @@ export function normalizeSprites(data: GenerateResponseOk): {
 export async function resizeSprites(
   sprites: PartialSprites | undefined,
   fallbackImageUrl?: string,
+  ctx?: { clientIp?: string },
 ): Promise<PartialSprites | undefined> {
   const imageUrls = sprites
     ? Object.values(sprites)
@@ -66,6 +67,7 @@ export async function resizeSprites(
   const resizeResp = await postJson<{ items?: { sourceUrl?: string; resizedUrl?: string }[] }>(
     RESIZE_SPRITES_URL,
     { imageUrls, maxWidth: 128, maxHeight: 128 },
+    { headers: { 'x-client-ip': ctx?.clientIp } },
   );
   if (!resizeResp.ok || !resizeResp.json || !Array.isArray(resizeResp.json.items)) return undefined;
 
@@ -91,10 +93,13 @@ export async function resizeSprites(
 export async function expandSpriteSheet(
   primaryImageUrl: string,
   existing?: PartialSprites,
+  ctx?: { clientIp?: string },
 ): Promise<PartialSprites | undefined> {
-  const expandResp = await postJson<GenerateResponseOk>(GENERATE_SPRITE_SHEET_URL, {
-    imageUrl: primaryImageUrl,
-  });
+  const expandResp = await postJson<GenerateResponseOk>(
+    GENERATE_SPRITE_SHEET_URL,
+    { imageUrl: primaryImageUrl },
+    { headers: { 'x-client-ip': ctx?.clientIp } },
+  );
   if (!expandResp.ok || !expandResp.json) return existing;
   const expandData = expandResp.json;
   if (!expandData.sprites) return existing;
@@ -114,6 +119,7 @@ export async function expandSpriteSheet(
 
 export async function computeBulletOriginsFromDiff(
   sprites: PartialSprites,
+  ctx?: { clientIp?: string },
 ): Promise<{ x: number; y: number }[] | undefined> {
   const muzzleOffUrl = sprites?.thrustersOnMuzzleOff?.url;
   const muzzleOnUrl = sprites?.thrustersOnMuzzleOn?.url;
@@ -123,13 +129,17 @@ export async function computeBulletOriginsFromDiff(
     boxes?: { x: number; y: number; width: number; height: number }[];
     imageWidth?: number;
     imageHeight?: number;
-  }>(DIFF_BOUNDING_BOX_URL, {
-    imageUrlA: muzzleOffUrl,
-    imageUrlB: muzzleOnUrl,
-    threshold: 0.03,
-    minBoxArea: 500,
-    minClusterPixels: 500,
-  });
+  }>(
+    DIFF_BOUNDING_BOX_URL,
+    {
+      imageUrlA: muzzleOffUrl,
+      imageUrlB: muzzleOnUrl,
+      threshold: 0.03,
+      minBoxArea: 500,
+      minClusterPixels: 500,
+    },
+    { headers: { 'x-client-ip': ctx?.clientIp } },
+  );
 
   if (!diffResp.ok || !diffResp.json) return undefined;
   const { boxes, imageWidth, imageHeight } = diffResp.json;
@@ -150,8 +160,15 @@ export async function computeBulletOriginsFromDiff(
   }));
 }
 
-export async function generateShipName(prompt: string): Promise<string | undefined> {
-  const resp = await postJson<{ name?: string }>(NAME_SHIP_URL, { prompt });
+export async function generateShipName(
+  prompt: string,
+  ctx?: { clientIp?: string },
+): Promise<string | undefined> {
+  const resp = await postJson<{ name?: string }>(
+    NAME_SHIP_URL,
+    { prompt },
+    { headers: { 'x-client-ip': ctx?.clientIp } },
+  );
   if (resp.ok && resp.json && typeof resp.json.name === 'string' && resp.json.name.trim()) {
     return resp.json.name.trim();
   }

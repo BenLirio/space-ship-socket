@@ -42,6 +42,7 @@ async function run() {
 
   client.send(JSON.stringify({ type: 'ping' }));
   await waitForMessage(client, (m) => m.type === 'ping');
+  // Ask server to echo connection info if available in future; for now, we just ensure the connection works.
   client.close();
   await new Promise((r) => client.once('close', r));
   await server.stop();

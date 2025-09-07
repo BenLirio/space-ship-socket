@@ -1,7 +1,8 @@
 import type { WebSocket } from 'ws';
 import type { RawData, WebSocketServer } from 'ws';
+import type { IncomingMessage as NodeIncomingMessage } from 'http';
 import type { IncomingMessage } from './types/messages.js';
-import { sendJson } from './socketUtils.js';
+import { sendJson, clientIpFromRequest } from './socketUtils.js';
 import { handlePing } from './handlers/ping.js';
 import { handleStartWithDefault } from './handlers/startWithDefault.js';
 import { handleStartWithPrompt } from './handlers/startWithPrompt.js';
@@ -35,9 +36,13 @@ function isIncomingMessage(value: unknown): value is IncomingMessage {
 export function attachSocketHandlers(wss: WebSocketServer) {
   // Ensure the game loop is running (idempotent)
   initGameLoop(wss);
-  wss.on('connection', (socket: CustomWebSocket) => {
+  wss.on('connection', (socket: CustomWebSocket, req: NodeIncomingMessage) => {
+    const ip = clientIpFromRequest(req);
+
     socket.id = randomUUID();
+    if (ip) socket.ip = ip;
     console.log(`New client connected: ${socket.id}`);
+    if (socket.ip) console.log(`  from IP: ${socket.ip}`);
     sendJson(socket, { type: 'info', payload: 'connected to server' });
     sendJson(socket, { type: 'connected', payload: { id: socket.id } });
 
@@ -45,7 +50,7 @@ export function attachSocketHandlers(wss: WebSocketServer) {
     // Errors are swallowed to avoid impacting connection flow (useful in dev/tests).
     void (async () => {
       try {
-        const list = await scoreboardList(25);
+        const list = await scoreboardList(25, socket.ip ? { clientIp: socket.ip } : undefined);
         if (list) sendJson(socket, { type: 'scoreboard', payload: list });
       } catch (err) {
         // non-fatal

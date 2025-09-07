@@ -44,6 +44,8 @@ export async function handleStartWithPrompt(
   let imageUrl: string | undefined;
   let sprites: PartialSprites | undefined;
   let resizedSprites: PartialSprites | undefined;
+  const clientIp = (socket as unknown as { ip?: string }).ip;
+  const ctx = clientIp ? { clientIp } : undefined;
   // Kick off name generation in parallel; we'll attach when ready.
   const namePromise = (async () => {
     try {
@@ -58,6 +60,7 @@ export async function handleStartWithPrompt(
     const resp = await postJson<GenerateResponseOk>(
       (await import('../services/endpoints.js')).GENERATE_SHIP_URL,
       { prompt },
+      { headers: { 'x-client-ip': clientIp } },
     );
     if (!resp.ok)
       return sendJson(socket, {
@@ -81,7 +84,7 @@ export async function handleStartWithPrompt(
 
     // Resize base sprite(s)
     sendJson(socket, { type: 'info', payload: 'resizing base sprite(s)…' });
-    resizedSprites = await resizeSprites(sprites, imageUrl).catch((err) => {
+    resizedSprites = await resizeSprites(sprites, imageUrl, ctx).catch((err) => {
       console.warn('[startWithPrompt] resize step failed', err);
       return undefined;
     });
@@ -105,7 +108,7 @@ export async function handleStartWithPrompt(
   if (primaryImageUrl && spriteUrlCount < 4) {
     try {
       sendJson(socket, { type: 'info', payload: 'expanding ship sprites…' });
-      sprites = await expandSpriteSheet(primaryImageUrl, sprites);
+      sprites = await expandSpriteSheet(primaryImageUrl, sprites, ctx);
       if (sprites) {
         const currentResizedSet = new Set(
           resizedSprites ? Object.values(resizedSprites).map((r) => r.url) : [],
@@ -118,7 +121,7 @@ export async function handleStartWithPrompt(
         const hasSubset = Object.keys(subset).length > 0;
         if (hasSubset) {
           sendJson(socket, { type: 'info', payload: 'resizing expanded sprites…' });
-          const newlyResized = await resizeSprites(subset).catch((err) => {
+          const newlyResized = await resizeSprites(subset, undefined, ctx).catch((err) => {
             console.warn('[startWithPrompt] resize expansion step failed', err);
             return undefined;
           });
@@ -141,7 +144,7 @@ export async function handleStartWithPrompt(
 
   // Compute bullet origins by diffing thrustersOnMuzzleOff vs thrustersOnMuzzleOn
   sendJson(socket, { type: 'info', payload: 'computing bullet origins…' });
-  const bulletOrigins = await computeBulletOriginsFromDiff(sprites)
+  const bulletOrigins = await computeBulletOriginsFromDiff(sprites, ctx)
     .catch((err) => {
       console.warn('[startWithPrompt] diff-bounding-box step failed', err);
       return undefined;
