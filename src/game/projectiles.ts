@@ -6,6 +6,8 @@ import {
   BULLET_DAMAGE,
 } from './constants.js';
 import type { InternalLoopState } from './types.js';
+import { scoreboardList, scoreboardSet } from '../services/scoreboard.js';
+import { broadcast } from '../socketUtils.js';
 
 export function spawnProjectile(loop: InternalLoopState, ship: ShipState) {
   // Supports variable number of gun origins derived from diff bounding boxes between muzzle on/off sprites.
@@ -98,7 +100,31 @@ export function simulateProjectiles(loop: InternalLoopState, dt: number) {
           ship.health = Math.max(0, prev - BULLET_DAMAGE);
           if (prev > 0 && ship.health === 0) {
             const killer = loop.gameState.ships[p.ownerId];
-            if (killer) killer.kills = (killer.kills ?? 0) + 1;
+            if (killer) {
+              killer.kills = (killer.kills ?? 0) + 1;
+              // Fire-and-forget scoreboard update followed by list+broadcast
+              void (async () => {
+                try {
+                  const id = p.ownerId;
+                  const name = killer.name;
+                  const score = killer.kills;
+                  // Always store the FULL-SIZE ship image for scoreboard: thrustersOnMuzzleOff
+                  // Prefer original sprites, then fall back to resized, then to appearance
+                  const shipImageUrl =
+                    killer.sprites?.thrustersOnMuzzleOff?.url ||
+                    killer.resizedSprites?.thrustersOnMuzzleOff?.url ||
+                    killer.appearance?.shipImageUrl;
+                  await scoreboardSet({ id, name, score, shipImageUrl });
+                  const list = await scoreboardList(25);
+                  if (list) {
+                    broadcast(loop.wss, { type: 'scoreboard', payload: list });
+                  }
+                } catch (err) {
+                  // Non-fatal; keep game loop responsive
+                  console.warn('[scoreboard] update/list failed', err);
+                }
+              })();
+            }
           }
           hit = true;
           break;

@@ -9,6 +9,7 @@ import { handleInputSnapshot } from './handlers/inputSnapshot.js';
 import type { CustomWebSocket } from './types/socket.js';
 import { randomUUID } from 'crypto';
 import { initGameLoop } from './game/loop.js';
+import { scoreboardList } from './services/scoreboard.js';
 
 // Concrete handler overload resolution via narrow mapping then widened when accessed dynamically
 const specificHandlers = {
@@ -39,6 +40,18 @@ export function attachSocketHandlers(wss: WebSocketServer) {
     console.log(`New client connected: ${socket.id}`);
     sendJson(socket, { type: 'info', payload: 'connected to server' });
     sendJson(socket, { type: 'connected', payload: { id: socket.id } });
+
+    // Fire-and-forget: fetch current scoreboard and send only to this client.
+    // Errors are swallowed to avoid impacting connection flow (useful in dev/tests).
+    void (async () => {
+      try {
+        const list = await scoreboardList(25);
+        if (list) sendJson(socket, { type: 'scoreboard', payload: list });
+      } catch (err) {
+        // non-fatal
+        console.warn('[scoreboard] list on join failed', err);
+      }
+    })();
 
     socket.on('message', (data: RawData) => {
       const text = data.toString();
